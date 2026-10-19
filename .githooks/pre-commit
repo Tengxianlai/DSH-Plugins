@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# 提交门禁：跑 scripts/verify.mjs（两个半边自测 + 语法 + 对账）。
+# 启用：git config core.hooksPath .githooks
+set -e
+exec node "$(git rev-parse --show-toplevel)/scripts/verify.mjs"

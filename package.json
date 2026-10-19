@@ -1,0 +1,35 @@
+{
+  "name": "dsh-deliverable-download",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DSH Web 的「下载」动作：交付卡片、变更文件卡片与预览标题栏各加一个下载入口，经认证路由把文件以附件形式交给浏览器（远程访问也能真正拿到文件）。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "test": "node test/host-route.test.mjs && node test/client-href.test.mjs",
+    "verify": "node scripts/verify.mjs",
+    "drift": "node scripts/check-docs-drift.mjs"
+  },
+  "files": [
+    "lib",
+    "client.js",
+    "README.md",
+    "STATE.md"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "license": "MIT"
+}
