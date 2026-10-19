@@ -170,7 +170,38 @@ console.log('ok  400 非法坐标（两条路由）');
   console.log('ok  MIME 回退与非 ASCII 文件名编码');
 }
 
-// 9) 插件面：名字与注入服务
+// 9) 查询层抛错：官方同口径判 404，而不是 500（真机验收时踩到过这个）
+{
+  const cases = [
+    ['SESSION_QUERY_EVENT_NOT_FOUND', 404],
+    ['SESSION_QUERY_SESSION_NOT_FOUND', 404],
+    ['ENOENT', 404],
+    ['别的码', 500]
+  ];
+  for (const [code, want] of cases) {
+    const { captured, ctx } = harness();
+    ctx.sessionQuery.readEvent = async () => {
+      const error = new Error('no such event');
+      error.code = code;
+      throw error;
+    };
+    const res = await get(captured, '/api/present.download').fetch(
+      new Request(`${base}/api/present.download?sessionId=s&seq=999&index=0`)
+    );
+    assert.equal(res.status, want, code);
+  }
+  // 嵌套一层的码也认（换一层包装不会退化成 500）
+  const { captured, ctx } = harness();
+  ctx.sessionQuery.readEvent = async () => {
+    throw { error: { code: 'session/not-found' } };
+  };
+  assert.equal((await get(captured, '/api/present.download').fetch(
+    new Request(`${base}/api/present.download?sessionId=s&seq=1&index=0`)
+  )).status, 404);
+  console.log('ok  查询层失败码 → 404（顶层/嵌套都认），未知码仍 500');
+}
+
+// 10) 插件面：名字与注入服务
 assert.equal(name, 'deliverable-download');
 assert.deepEqual(inject, ['connection', 'sessionQuery', 'workspaceChanges', 'workspaceFiles', 'fs', 'sandboxPolicy']);
 console.log('ok  插件面 name/inject');

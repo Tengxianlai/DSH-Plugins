@@ -88,14 +88,22 @@ function driftBlock(text, file) {
     throw new Error(`未预料的 require：${id}`);
   });
   const registered = new Map();
+  let dict;
   plugin.apply({
     effect: (cb) => { cb(); return () => {}; },
-    locale: { register: () => {}, bind: () => (k) => k },
+    // 字典必须真注册上：组件用 slot 绑定的 `t`，没有兜底文案（见 STATE.md 第 4 节缺陷 1）。
+    locale: { register: (_ns, dicts) => { dict = dicts; } },
     slots: { inject: (name, register) => registered.set(name, register()), register: (o, C) => ({ o, C }) }
   });
+  if (dict?.zh?.download === undefined) bad('浏览器半体没有注册 zh 字典（slot 的 t 会退化成原始 key）');
+  const t = (key, params) => {
+    const value = dict.zh[key];
+    if (value === undefined) bad(`字典缺 key：${key}`);
+    return params === undefined ? String(value ?? key) : String(value ?? key).replace(/\{(\w+)\}/gu, (_, k) => String(params[k]));
+  };
   const card = registered.get('deliverables.file.actions').C;
   for (const family of families) {
-    const tree = card({ actionUrl: `api/${family}.open?sessionId=s1&seq=2&index=3` });
+    const tree = card({ t, actionUrl: `api/${family}.open?sessionId=s1&seq=2&index=3` });
     const expected = `https://dsh.example/api/${family}.download?sessionId=s1&seq=2&index=3`;
     if (tree === null) bad(`浏览器半体不认卡片地址：api/${family}.open`);
     else if (tree.props.href !== expected) bad(`地址改写不对：期望 ${expected}，得到 ${String(tree.props.href)}`);

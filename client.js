@@ -41,8 +41,13 @@ window.__ModuleLoader__.load({
       '.ddl_action svg{width:15px;height:15px;flex:none;display:block}'
     ].join('');
 
-    /** 中文/英文兜底：locale 服务没挂上时也不至于没有标签。 */
-    const FALLBACK = { zh: { download: '下载', downloadNamed: '下载 {name}' }, en: { download: 'Download', downloadNamed: 'Download {name}' } };
+    /**
+     * 字典（唯一一份文案）。`locale` 是 inject 里声明的必需服务：
+     * 条目一旦声明 `locale: NS`，slot 装配就会把 `t` 绑到本命名空间上，
+     * 组件直接用它，不再另留一份兜底文案 —— 兜底会把"字典没注册上"
+     * 这类接线错误藏起来（2026-10-19 首次验收就踩到：tooltip 显示原始 key）。
+     */
+    const DICT = { zh: { download: '下载', downloadNamed: '下载 {name}' }, en: { download: 'Download', downloadNamed: 'Download {name}' } };
 
     /** 只注入一次样式。 */
     function ensureStyle() {
@@ -116,7 +121,7 @@ window.__ModuleLoader__.load({
     function CardDownloadAction(props) {
       const href = downloadHref(props.actionUrl);
       if (href === undefined) return null;
-      const label = typeof props.t === 'function' ? props.t('download') : FALLBACK.zh.download;
+      const label = props.t('download');
       return react.createElement('a', {
         className: 'ddl_action',
         href,
@@ -142,7 +147,7 @@ window.__ModuleLoader__.load({
       const href = fileHref(props.absolutePath);
       if (href === undefined) return null;
       const name = basenameOf(props.absolutePath);
-      const label = typeof props.t === 'function' ? props.t('downloadNamed', { name }) : `${FALLBACK.zh.download} ${name}`;
+      const label = props.t('downloadNamed', { name });
       return react.createElement('a', {
         className: 'ddl_action',
         href,
@@ -162,13 +167,8 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       ensureStyle();
 
-      // 字典：让按钮文案跟随界面语言。注册失败也不影响按钮本身（有兜底文案）。
-      try {
-        ctx.effect(() => ctx.locale.register(NS, { zh: FALLBACK.zh, en: FALLBACK.en }),
-          'deliverable-download: locale');
-      } catch {
-        /* 没有 locale 服务时按兜底文案走 */
-      }
+      // 字典：让按钮文案跟随界面语言。`locale` 在 inject 里声明，缺了就不该挂 —— 不吞错。
+      ctx.effect(() => ctx.locale.register(NS, DICT), 'deliverable-download: locale');
 
       // 两个卡片动作区：官方 id 是 'open-in-app'（默认 order 0），下载排在它左边更顺手。
       for (const slot of ['deliverables.file.actions', 'deliverables.review.file.actions']) {
@@ -190,7 +190,8 @@ window.__ModuleLoader__.load({
     }
 
     exports.name = 'deliverable-download';
-    exports.inject = ['slots'];
+    // locale 与 slots 都是必需服务：声明 locale 才拿得到绑定好的 t（见 DICT 上方注释）。
+    exports.inject = ['slots', 'locale'];
     exports.apply = apply;
     return exports;
   }
