@@ -1,0 +1,31 @@
+{
+  "name": "dsh-image-gen",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TeamoRouter 图像生成/编辑工具：一次调用出图或图生图，文件落盘，图片字节不进上下文。",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": {
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "license": "MIT",
+  "scripts": {
+    "verify": "node scripts/verify.mjs"
+  }
+}

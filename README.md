@@ -10,6 +10,7 @@ profile 上；挂载行写在插件自己的 `cordis.patch.yml` 里，profile �
 | `dsh-deliverable-download` | 0.1.0 | host + web | 交付/变更卡片与预览标题栏的「下载」动作，经认证路由以附件下发 |
 | `dsh-playwright-per-agent` | 0.2.0 | host | 在每个根 agent 上下文里挂 Playwright MCP |
 | `dsh-session-id` | 0.1.0 | host + web | 会话标题栏显示当前 session id，点击复制 |
+| `dsh-image-gen` | 0.1.0 | host | TeamoRouter 生图/图生图工具：一次调用出图或改图，文件落盘，替代 magpie 的 image MCP |
 
 ## 装机状态（profile `web`）
 

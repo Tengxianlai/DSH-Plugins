@@ -5,5 +5,8 @@
   "description": "自建 DSH 插件单仓：每个 plugins/<name> 是一个可托管安装的 dsh bundle。",
   "scripts": {
     "verify": "node scripts/verify.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.2"
   }
 }

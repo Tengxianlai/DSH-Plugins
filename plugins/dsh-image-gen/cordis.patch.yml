@@ -1,0 +1,7 @@
+# dsh-image-gen：用 TeamoRouter 的 OpenAI 兼容 Images API 替代 magpie 的 image MCP。
+# 密钥走凭据存储的 TEAMOROUTER_API_KEY（缺省时回退 ~/.dsh-wsl/secrets/teamorouter.env）。
+- insert:
+    - id: image-gen
+      name: dsh-image-gen
+      config:
+        baseURL: https://api.teamorouter.com/v1
