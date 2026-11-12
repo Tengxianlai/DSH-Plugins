@@ -1,0 +1,17 @@
+{
+  "name": "dsh-playwright-per-agent",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "description": "Mount Playwright MCP in each root agent context.",
+  "files": [
+    "index.js",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

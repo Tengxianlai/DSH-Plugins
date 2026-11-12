@@ -1,0 +1,33 @@
+{
+  "name": "dsh-session-id",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DSH Web 会话标题栏显示当前会话 ID（截断显示），点击复制完整 session id。",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": {
+      "default": "./index.js"
+    },
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "license": "MIT"
+}
