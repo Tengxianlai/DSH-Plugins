@@ -27,5 +27,8 @@
   "license": "MIT",
   "scripts": {
     "verify": "node scripts/verify.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.2"
   }
 }
