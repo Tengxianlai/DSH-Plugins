@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * dsh-deliverable-download —— 宿主半体（Node 侧）。
  *
@@ -43,7 +45,7 @@ const CHANGES_ROUTE = '/api/changes.download';
  * 刻意不引配置依赖：本包不 import 任何第三方模块，只依赖调用方注入的服务，
  * 这样它不需要在 profile 的 node_modules 里额外装依赖。需要下调时改这里。
  */
-const MAX_BYTES = 512 * 1024 * 1024;
+const CHUNK_BYTES = 1024 * 1024;
 
 /** 未识别扩展名时的回退类型。 */
 const FALLBACK_TYPE = 'application/octet-stream';
@@ -93,6 +95,7 @@ const FAILURE_STATUSES = {
   FS_PERMISSION_DENIED: 403,
   FS_SANDBOX_DENIED: 403,
   FS_TOO_LARGE: 413,
+  FS_STALE_VERSION: 409,
   FS_ABORTED: 499,
   // 事件/会话/工作区文件不存在：官方 present.open 的 failureStatus 同判为 404
   SESSION_QUERY_SESSION_NOT_FOUND: 404,
@@ -256,13 +259,57 @@ async function targetOfChanges(ctx, at, signal) {
 }
 
 /**
- * 服务一次下载：解析坐标 → 解析主机路径 → 往返核对 → 读字节 → 附件响应。
+ * 服务一次下载：解析坐标 → 解析主机路径 → 往返核对 → 分块读取 → 附件响应。
  * @param {object} ctx - 宿主上下文（connection / sessionQuery / workspaceChanges / workspaceFiles / fs / sandboxPolicy）。
  * @param {Request} request - 已过认证围栏的请求。
  * @param {(ctx: object, at: object, signal: AbortSignal) => Promise<{absolutePath: string} | Response>} resolveTarget
  *   该族路由的目标解析器（present / changes）。
  * @returns {Promise<Response>} 附件响应或带原因的失败响应。
  */
+function rangeFor(value, size) {
+  const match = /^bytes=(\d*)-(\d*)$/u.exec(value);
+  if (!match || size === 0 || (!match[1] && !match[2])) return undefined;
+  const first = Number(match[1]);
+  const last = Number(match[2]);
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last)) return undefined;
+  if (!match[1]) return last > 0 ? { start: Math.max(0, size - last), end: size - 1 } : undefined;
+  if (first >= size || (match[2] && last < first)) return undefined;
+  return { start: first, end: match[2] ? Math.min(size - 1, last) : size - 1 };
+}
+
+async function downloadBody(fs, target, info, start, end, signal) {
+  if (end < start) return null;
+  const cancelled = new AbortController();
+  const readSignal = AbortSignal.any([signal, cancelled.signal]);
+  let offset = start;
+  const read = async () => {
+    const length = Math.min(CHUNK_BYTES, end - offset + 1);
+    const data = await fs.readByteRange(target, { offset, length }, readSignal);
+    const current = await fs.stat(target, readSignal);
+    if (data.byteLength !== length || current?.version !== info.version || current?.size !== info.size) {
+      const error = new Error('File changed during download.');
+      error.code = 'FS_STALE_VERSION';
+      throw error;
+    }
+    offset += data.byteLength;
+    return data;
+  };
+  const first = await read();
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(first);
+      if (offset > end) controller.close();
+    },
+    async pull(controller) {
+      controller.enqueue(await read());
+      if (offset > end) controller.close();
+    },
+    cancel() {
+      cancelled.abort();
+    }
+  });
+}
+
 async function serveDownload(ctx, request, resolveTarget) {
   const at = coordinatesOf(request);
   if (at === undefined) return fail('Invalid file coordinates.', 400);
@@ -280,14 +327,34 @@ async function serveDownload(ctx, request, resolveTarget) {
     const resolved = await ctx.fs.resolve(mapped, { signal: request.signal });
     if (ctx.fs.processPath(resolved) !== absolutePath) return fail('Path has no verified Host path.', 422);
 
-    // 3) 读字节并以附件返回。
-    const bytes = await ctx.fs.readBytes(resolved, request.signal, MAX_BYTES);
+    const info = await ctx.fs.stat(resolved, request.signal);
+    if (!info) return fail('File not found.', 404);
+    if (info.type !== 'file') return fail('File is not regular.', 403);
+    if (!Number.isSafeInteger(info.size) || info.size < 0) return fail('File size unavailable.', 422);
+
+    const etag = '"' + createHash('sha256').update(JSON.stringify([absolutePath, info.version, info.size])).digest('hex') + '"';
+    const requested = request.headers.get('range');
+    const validator = request.headers.get('if-range');
+    const useRange = requested !== null && (validator === null || validator === etag);
+    const range = useRange ? rangeFor(requested, info.size) : { start: 0, end: info.size - 1 };
+    if (!range) return new Response(null, {
+      status: 416,
+      headers: { ...noStore(), 'accept-ranges': 'bytes', 'content-range': 'bytes */' + info.size }
+    });
+
+    const { start, end } = range;
+    const body = await downloadBody(ctx.fs, resolved, info, start, end, request.signal);
     const name = basename(absolutePath);
-    return new Response(bytes.slice(), {
+    return new Response(body, {
+      status: useRange ? 206 : 200,
       headers: {
         ...noStore(),
+        etag,
+        'accept-ranges': 'bytes',
+        'x-accel-buffering': 'no',
+        ...(useRange ? { 'content-range': 'bytes ' + start + '-' + end + '/' + info.size } : {}),
         'content-type': contentTypeOf(name),
-        'content-length': String(bytes.byteLength),
+        'content-length': String(end - start + 1),
         'content-disposition': contentDisposition(name),
         'x-content-type-options': 'nosniff',
         // 即便被当成文档打开也只是个沙箱，不执行脚本、不外联。

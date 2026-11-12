@@ -13,7 +13,8 @@ function harness(overrides = {}) {
     processPathFromHostPath: (p) => p,
     resolve: async (p) => ({ displayPath: p }),
     processPath: (t) => t.displayPath,
-    readBytes: async () => new TextEncoder().encode('BYTES'),
+    stat: async () => ({ type: 'file', size: 5, version: 'v1' }),
+    readByteRange: async (_, { offset, length }) => new TextEncoder().encode('BYTES').slice(offset, offset + length),
     ...overrides.fs
   };
   captured.fs = fs;
@@ -155,7 +156,7 @@ console.log('ok  400 非法坐标（两条路由）');
     ['什么都不是', 500]
   ];
   for (const [code, want] of cases) {
-    const { captured } = harness({ fs: { readBytes: async () => { const e = new Error('x'); e.code = code; throw e; } } });
+    const { captured } = harness({ fs: { readByteRange: async () => { const e = new Error('x'); e.code = code; throw e; } } });
     assert.equal((await get(captured, '/api/present.download').fetch(new Request(`${base}/api/present.download?sessionId=s&seq=1&index=0`))).status, want, code);
   }
   console.log('ok  FS 失败码映射');
@@ -206,3 +207,47 @@ assert.equal(name, 'deliverable-download');
 assert.deepEqual(inject, ['connection', 'sessionQuery', 'workspaceChanges', 'workspaceFiles', 'fs', 'sandboxPolicy']);
 console.log('ok  插件面 name/inject');
 console.log('\n全部通过');
+
+
+// A range stays bounded and a stale If-Range restarts the full response.
+{
+  const { captured } = harness();
+  const route = get(captured, '/api/present.download');
+  const url = `${base}/api/present.download?sessionId=s1&seq=5&index=0`;
+  const range = await route.fetch(new Request(url, { headers: { range: 'bytes=1-3' } }));
+  assert.equal(range.status, 206);
+  assert.equal(range.headers.get('content-range'), 'bytes 1-3/5');
+  assert.equal(await range.text(), 'YTE');
+  const suffix = await route.fetch(new Request(url, { headers: { range: 'bytes=-2' } }));
+  assert.equal(await suffix.text(), 'ES');
+  const invalid = await route.fetch(new Request(url, { headers: { range: 'bytes=9-' } }));
+  assert.equal(invalid.status, 416);
+  const stale = await route.fetch(new Request(url, { headers: { range: 'bytes=1-', 'if-range': '"older"' } }));
+  assert.equal(stale.status, 200);
+  assert.equal(await stale.text(), 'BYTES');
+}
+{
+  const size = 2 * 1024 * 1024 + 1;
+  const reads = [];
+  const { captured } = harness({ fs: {
+    stat: async () => ({ type: 'file', size, version: 'v1' }),
+    readByteRange: async (_, window) => {
+      reads.push(window);
+      return new Uint8Array(window.length);
+    }
+  } });
+  const route = get(captured, '/api/present.download');
+  const result = await route.fetch(new Request(`${base}/api/present.download?sessionId=s1&seq=5&index=0`));
+  assert.equal((await result.arrayBuffer()).byteLength, size);
+  assert.deepEqual(reads.map(({ length }) => length), [1048576, 1048576, 1]);
+}
+{
+  const { captured } = harness({ fs: {
+    stat: async () => ({ type: 'file', size: 0, version: 'v1' }),
+    readByteRange: async () => { throw new Error('zero bytes should never be read'); }
+  } });
+  const route = get(captured, '/api/present.download');
+  const result = await route.fetch(new Request(`${base}/api/present.download?sessionId=s1&seq=5&index=0`));
+  assert.equal(result.status, 200);
+  assert.equal((await result.arrayBuffer()).byteLength, 0);
+}

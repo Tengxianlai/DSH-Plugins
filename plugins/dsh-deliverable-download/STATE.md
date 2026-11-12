@@ -3,16 +3,17 @@
 > 只回答"现在是什么样"。与其它文档冲突以本文件为准；与代码/运行现场冲突**以现场为准，并立刻改本文件**。
 > 过去时（为什么这么选）→ `docs/decisions/`；将来时（要变成什么样）→ 本仓暂无目标基线文件。
 
-**最后核实**：2026-10-19（源码、单测与**真机验收**均当场跑过；未覆盖项见第 4 节末）
+**最后核实**：2026-11-13（迁入 DSH-Plugins 单仓并改走 bundle 托管通道；DSH 0.2.2-rc.2）
 
 ## 1. 东西在哪（拓扑）
 
 | 位置 | 是什么 | 状态 |
 |---|---|---|
-| `~/DSH_ZONE/tools/dsh-deliverable-download/` | 源码正本（本仓） | 维护中 |
-| `~/.dsh/profiles/web/node_modules/dsh-deliverable-download` | 软链 → 正本（DSH 的插件解析路径） | 已建立（2026-10-19） |
-| `~/.dsh/machine.yml` 末节 | 挂载行 `- id: deliverable-download / name: 'dsh-deliverable-download'` | 已写入；**只在 dsh 启动时读取** |
-| 运行中的 dsh-web | 尚未加载本插件 | **待重启**（见第 4 节） |
+| `~/DSH_ZONE/Projects/DSH-Plugins/plugins/dsh-deliverable-download/` | 源码正本（本仓） | 维护中（2026-11-13 从 `tools/` 迁入） |
+| `~/.dsh-wsl/profiles/web/node_modules/dsh-deliverable-download` | 软链 → 正本（DSH 的插件解析路径） | 待重装（迁移后重新托管安装） |
+| `~/.dsh-wsl/profiles/web/package.json` | `dependencies` 记 `link:`；`dsh.profile.bundles` 含本包 | 托管通道（2026-11-13 起） |
+| 本包的 `cordis.patch.yml` | 挂载行 `- id: deliverable-download / name: dsh-deliverable-download` | 已写入；**只在 dsh 启动时读取** |
+| 运行中的 dsh-web | 迁移前已加载；**重启后**才走 bundle 通道 | 待重启 |
 
 ## 2. 已停用 / 已废止
 
@@ -36,9 +37,9 @@
    预览 iframe 里做不到的事，在卡片/标题栏这一层是成立的。
 3. **客户端插件清单是启动时构建的**：DSH 的 client-modules 按 Loader 条目扫 `dsh.client`
    并组合 `__DSH_BOOT__`（源码注释：owing-tree base URL "until restart"）。
-   所以**加了插件必须重启 dsh-web**，`machine.yml` 又是启动时读取的 —— 两者一致。
-4. **本包刻意零第三方依赖**：profile 的 `node_modules`（`~/.dsh/profiles/web/node_modules/`）
-   里**没有** `@deepseek-ai/*`——那些包装在 `~/DSH_ZONE/tools/dsh-alpha/node_modules/`。
+   所以**加了插件必须重启 dsh-web**；bundle 层同样是启动时合并的 —— 两者一致。
+4. **本包刻意零第三方依赖**：profile 的 `node_modules`（`~/.dsh-wsl/profiles/web/node_modules/`）
+   里**没有** `@deepseek-ai/*`——那些包装在 `~/DSH_ZONE/tools/dsh-rc2-clean/node_modules/`。
    所以宿主半体不 import 任何东西（连 `node:path` 都自己写了 `basename`），
    浏览器半体只用 ModuleLoader 的静态模块（`react`、`ui-primitives`）。
    一旦引第三方依赖，必须同时往 profile 的 `node_modules` 里装。
@@ -55,6 +56,16 @@
 7. **没有覆盖的**：正文里"提到"但**当轮没产出/没交付**的文件，聊天渲染出的路径芯片是
    惰性的（官方 `producedFileMentions` 只解析当轮 produced/presented 路径）——那种文件要
    靠右侧「文件」面板打开后从标题栏下载，或让 agent 用 `present` 交付一下。
+
+**2026-10-20 rc.2 复核（升级后重跑契约检查）**
+
+| 检查 | 结果 |
+|---|---|
+| 原生是否已提供下载动作 | **没有**：交付卡片客户端包里只有 `api/present.open`、`api/present.host`、`api/changes.open/.diff/.summary`，无 download 动作、无 `Content-Disposition` 路由 ⇒ 本插件仍必要 |
+| 三个挂载槽位 | `deliverables.file.actions`、`deliverables.review.file.actions`、`sidebar.right.tab.document.actions` 在 rc.2 仍在 |
+| 宿主依赖的服务 | `sessionQuery.readEvent`、`workspaceChanges.summary`、`workspaceFiles.stat`、`fs.*`、`connection.fetch.register` 在 rc.2 都在 |
+| 两条路由是否注册 | `/api/present.download`、`/api/changes.download` 无 Cookie → **401**（与官方 `/api/present.open` 同码，说明仍在认证围栏后，不是 404） |
+| 客户端半体是否下发 | 页面组合包里 `dsh-deliverable-download` 出现 11 处 ⇒ 已随 rc.2 的 client-modules 组合下发 |
 
 ## 4. 验收记录 / 在制品
 
@@ -96,7 +107,7 @@
 | "客户端插件必须重启才生效" | DSH 支持客户端插件热加载之后 |
 | iframe 沙箱与 SameSite 的边界（第 3.1 条） | 官方改了预览 iframe 的 sandbox 或 Cookie 策略之后 |
 | 三个入口的槽位 id | 官方调整 `deliverables.*.actions` / `sidebar.right.tab.document.actions` 之后 |
-| 安装软链与 `machine.yml` 挂载 | 任何一次挪动正本 / 重装 DSH / 换机器 |
+| 安装软链与 bundle 挂载 | 任何一次挪动正本 / 重装 DSH / 换机器 |
 | 本插件的存在意义 | 官方把"下载"并入交付卡片之后（本插件可退场） |
 
 ## 6. 外部事实指针（basic-memory）——只留指针，不复制内容

@@ -4,7 +4,8 @@
  *  1. 宿主半体注册的下载路由，与浏览器半体改写出来的地址，必须一一对上
  *     —— 半边改名是最容易犯、又最难在界面上看出来的漂移（按钮还在，点了 404）；
  *  2. 安装软链是否还在、是否指向本仓 —— 源码挪窝 = 静默卸载，界面不会报错；
- *  3. 本机层 machine.yml 是否还挂着本插件 —— 删了这行，重启后插件不再加载；
+ *  3. profile 的 bundle 通道是否真的接通：`dsh.profile.bundles` 有本包、依赖是 `link:`、
+ *     profile 自己的 patch 里没有重复 `insert` 行 —— 任何一项不对，重启后插件不加载或挂两次；
  *  4. STATE.md / README.md 这类"现在时"文件里引用的仓内路径必须存在；
  *  5. drift-check 块里登记为"已停用"的术语，在现在时文件里必须带停用标记
  *     （当前没有停用项，保留机制）。
@@ -18,6 +19,9 @@ import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+/** 当前 profile 目录：优先环境变量（dsh 启动的会话里总是有），否则按 home 推断。 */
+const PROFILE_DIR = process.env.DSH_PROFILE_DIR
+  ?? join(process.env.DSH_HOME ?? join(homedir(), '.dsh-wsl'), 'profiles', process.env.DSH_PROFILE ?? 'web');
 const failures = [];
 const ok = (message) => console.log(`ok   ${message}`);
 const bad = (message) => {
@@ -113,7 +117,7 @@ function driftBlock(text, file) {
 
 // ── 2. 安装软链 ─────────────────────────────────────────────────────────
 {
-  const link = join(homedir(), '.dsh/profiles/web/node_modules/dsh-deliverable-download');
+  const link = join(PROFILE_DIR, 'node_modules', 'dsh-deliverable-download');
   if (!existsSync(link) && lstatSync(link, { throwIfNoEntry: false }) === undefined) {
     bad(`安装软链不存在：${link}（插件不会被加载）`);
   } else if (!lstatSync(link).isSymbolicLink()) {
@@ -125,14 +129,29 @@ function driftBlock(text, file) {
   }
 }
 
-// ── 3. 本机层挂载 ───────────────────────────────────────────────────────
+// ── 3. profile 的 bundle 通道 ───────────────────────────────────────────
 {
-  const machine = join(homedir(), '.dsh/machine.yml');
-  const text = existsSync(machine) ? readFileSync(machine, 'utf8') : '';
-  if (!/name:\s*['"]?dsh-deliverable-download['"]?/u.test(text)) {
-    bad(`${machine} 里没有挂着 dsh-deliverable-download（重启后插件不会加载）`);
+  const manifestPath = join(PROFILE_DIR, 'package.json');
+  const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
+  const bundles = manifest.dsh?.profile?.bundles ?? [];
+  if (!bundles.includes('dsh-deliverable-download')) {
+    bad(`${manifestPath} 的 dsh.profile.bundles 里没有 dsh-deliverable-download（重启后插件不会加载）`);
   } else {
-    ok('machine.yml 挂载行在位');
+    ok('profile 的 dsh.profile.bundles 里有本插件');
+  }
+  const dependency = manifest.dependencies?.['dsh-deliverable-download'];
+  if (typeof dependency !== 'string' || !dependency.startsWith('link:')) {
+    bad(`profile 依赖不是 link: 形态（${String(dependency)}），改代码不会同步到插件`);
+  } else {
+    ok(`依赖以 link: 记录：${dependency}`);
+  }
+  // 一个插件只挂一次：profile 自己的补丁层不得再出现本插件的 insert 行。
+  const profilePatch = join(PROFILE_DIR, 'cordis.patch.yml');
+  const patchText = existsSync(profilePatch) ? readFileSync(profilePatch, 'utf8') : '';
+  if (/name:\s*['"]?dsh-deliverable-download['"]?/u.test(patchText)) {
+    bad(`${profilePatch} 仍挂着 dsh-deliverable-download（与 bundle 层重复挂载）`);
+  } else {
+    ok('profile 自己的 patch 里没有重复挂载行');
   }
 }
 
