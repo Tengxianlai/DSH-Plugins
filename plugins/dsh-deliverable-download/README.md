@@ -41,34 +41,22 @@ DSH 原本只有两条"打开文件"的动作，对远程浏览器（Mac/PC 访�
 
 ## 安装（WSL / Teng-PC）
 
-正本 `~/DSH_ZONE/tools/dsh-deliverable-download/`，安装位（软链）
-`~/.dsh/profiles/web/node_modules/dsh-deliverable-download`；
-`node_modules/` 在 DSH-Home 的 `.gitignore` 里，不污染版本库。
+正本在单仓 `~/DSH_ZONE/Projects/DSH-Plugins/plugins/dsh-deliverable-download/`，以软链挂在
+profile `~/.dsh-wsl/profiles/web/node_modules/dsh-deliverable-download`。
 
-```bash
-ln -s ~/DSH_ZONE/tools/dsh-deliverable-download \
-      ~/.dsh/profiles/web/node_modules/dsh-deliverable-download
+挂载走 **bundle 通道**：本包的 `cordis.patch.yml` 自带那一行 `insert`，profile 的
+`dsh.profile.bundles` 里登记本包名，profile 自己的 `cordis.patch.yml` **不写**它
+（写了就是重复挂载）。装机一条命令——Plugins 页面或 agent 的
+`plugin_manager install_bundle`，target 用绝对路径：
+
+```text
+/home/tengxlper/DSH_ZONE/Projects/DSH-Plugins/plugins/dsh-deliverable-download
 ```
 
-挂载：在**本机层** `~/.dsh/machine.yml` 加（不放共享层，Mac 上没装这个包）：
+宿主半边（`lib/index.js`）改完必须重启 dsh-web 才生效（**不要在会话进行中重启**，
+会掐断正在跑的 turn）；浏览器半边（`client.js`）刷新页面即可。
 
-```yaml
-- insert:
-    - id: deliverable-download
-      name: 'dsh-deliverable-download'
-```
-
-重启（`machine.yml` 与客户端插件清单都只在启动时读取；**不要在会话进行中重启**，会掐断正在跑的 turn）：
-
-```bash
-systemctl --user restart dsh-web
-```
-
-换机器后启用提交门禁（`core.hooksPath` 是本仓本地配置，不入库）：
-
-```bash
-git config core.hooksPath .githooks
-```
+单仓的提交门禁由仓根 `.githooks` 负责（`core.hooksPath` 是本地配置，不入库，见仓根 README）。
 
 ## 验证
 
@@ -83,8 +71,9 @@ node scripts/verify.mjs
 - `test/client-href.test.mjs`：假 `__ModuleLoader__` 载入浏览器半体，断言三个槽位的注册，
   以及地址改写（`present.open`→`present.download`、`changes.open`→`changes.download`、
   `absolutePath`→`/api/file?path=`）与边界拒绝（相对路径/UNC/控制字符）。
-- `scripts/check-docs-drift.mjs`：宿主路由 ↔ 浏览器改写必须一一对上、安装软链与
-  `machine.yml` 挂载在位、现在时文件引用的路径存在、已停用术语带标记。
+- `scripts/check-docs-drift.mjs`：宿主路由 ↔ 浏览器改写必须一一对上、安装软链指向本仓、
+  profile 的 `dsh.profile.bundles` 登记了本包且 profile 自己的 patch 没有重复挂载行、
+  现在时文件引用的路径存在、已停用术语带标记。
 
 重启起效后按这三步验收（**当前尚未验收，见 STATE.md 第 4 节**）：
 
@@ -99,7 +88,7 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 ## 卸载
 
-删 `machine.yml` 里那一节 + 移除软链 + 重启 dsh-web。
+`plugin_manager` 的 `remove_bundle dsh-deliverable-download`（或 Plugins 页面卸载），然后重启 dsh-web。
 
 ## 已知边界
 

@@ -120,11 +120,13 @@
 ## 质量门
 
 ```bash
-node scripts/verify.mjs        # 两个半边自测 + 语法 + 对账
+node scripts/verify.mjs        # 本插件的两个半边自测 + 语法 + 对账
+cd ../.. && npm run verify     # 单仓全量（所有插件）
 ```
 
-`.githooks/pre-commit` 调用同一个脚本；仓库本地已设 `core.hooksPath=.githooks`
-（该配置不入库，换机器要重设一次，见 README）。
+提交门禁在**仓根** `.githooks/pre-commit`，它跑仓根 `scripts/verify.mjs`；
+`core.hooksPath=.githooks` 是仓本地配置，不入库，换机器要重设一次（见仓根 README）。
+插件目录里不再有自己的 `.githooks`。
 
 <!-- 机器可判部分：scripts/check-docs-drift.mjs 读这个块 -->
 

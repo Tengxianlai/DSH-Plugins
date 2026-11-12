@@ -25,6 +25,7 @@ profile 上；挂载行写在插件自己的 `cordis.patch.yml` 里，profile �
 ```sh
 cd ~/DSH_ZONE/Projects/DSH-Plugins
 npm run verify                      # 全仓体检：manifest / 语法 / 各插件自测
+git config core.hooksPath .githooks # 启用提交门禁（本地配置，不入库，换机重设）
 git tag <name>@<version>            # 记录对外发布点
 node --check plugins/<name>/index.js
 ```
