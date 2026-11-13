@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Gemini 创作与审看",
+    "description": "写剧本、对白、文案，或拿场景图、分镜、PDF 和剧本对照做审看；用自然语言提问，材料按路径交给 Gemini 4 Argon。",
+    "detail": "docs/DETAIL.md"
+  }
+}

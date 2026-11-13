@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Gemini 文本",
+    "description": "用 Gemini 4 写剧本、改稿、分析长文。请求只带插件自带的写作指令，不经过 Harness 身份段，输出纯文本。",
+    "detail": "docs/DETAIL.md"
+  }
+}

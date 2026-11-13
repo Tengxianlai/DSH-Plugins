@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Gemini text",
+    "description": "Write scripts, revise drafts, and analyze long text with Gemini 4. The request carries only this plugin's writing instruction, never the Harness identity block, and returns plain text.",
+    "detail": "docs/DETAIL.md"
+  }
+}

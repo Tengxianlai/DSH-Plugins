@@ -1,0 +1,7 @@
+# dsh-gemini：Gemini 4 Argon 多模态工具（写 / 看 / 读 / 对照）。
+# 密钥走凭据存储的 TEAMOROUTER_API_KEY，缺失时回退 $DSH_HOME/secrets/teamorouter.env。
+- insert:
+    - id: gemini
+      name: dsh-gemini
+      config:
+        baseURL: https://api.teamorouter.com/v1beta

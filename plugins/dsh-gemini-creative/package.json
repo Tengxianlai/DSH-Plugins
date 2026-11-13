@@ -1,0 +1,37 @@
+{
+  "name": "dsh-gemini-creative",
+  "version": "0.3.0",
+  "private": true,
+  "description": "按需加载的创作与审看技能：写剧本/文案，或拿场景图、分镜、PDF 与剧本对照。",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": {
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md",
+    "assets",
+    "locale/*.json",
+    "docs",
+    "icon.svg"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "license": "MIT",
+  "scripts": {
+    "verify": "node scripts/verify.mjs"
+  }
+}

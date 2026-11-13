@@ -11,6 +11,8 @@ profile 上；挂载行写在插件自己的 `cordis.patch.yml` 里，profile �
 | `dsh-playwright-per-agent` | 0.2.0 | host | 在每个根 agent 上下文里挂 Playwright MCP |
 | `dsh-session-id` | 0.1.0 | host + web | 会话标题栏显示当前 session id，点击复制 |
 | `dsh-image-gen` | 0.1.0 | host | TeamoRouter 生图/图生图工具：一次调用出图或改图，文件落盘，替代 magpie 的 image MCP |
+| `dsh-gemini` | 0.3.0 | host | Gemini 4 Argon 多模态工具：写、看、读、对照；图片/PDF/片段/文本，自然语言提问 |
+| `dsh-gemini-creative` | 0.3.0 | host | 按需加载的创作与审看技能：写剧本/文案，或拿场景图、分镜、PDF 与剧本对照 |
 
 ## 装机状态（profile `web`）
 

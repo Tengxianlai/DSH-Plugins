@@ -1,0 +1,5 @@
+# dsh-gemini-creative：按需加载的创作与审看技能。
+# 只注册技能目录条目；真正发请求的是 dsh-gemini 的 gemini 工具。
+- insert:
+    - id: gemini-creative
+      name: dsh-gemini-creative
