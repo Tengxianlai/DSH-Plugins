@@ -1,11 +1,13 @@
 /**
- * TeamoRouter image generation tool for DeepSeek Harness.
+ * Image generation tool for DeepSeek Harness.
  *
- * One compact tool (`image_generate`) over the OpenAI-compatible Images API:
- * text-to-image through /v1/images/generations, and image-to-image (edit,
- * combine, keep a subject consistent) through /v1/images/edits when
- * `images` is given. Saves PNG/JPEG/WebP files next to the session and
- * returns their paths, instead of streaming image bytes into the context.
+ * One `image_generate` tool over two OpenAI-compatible image backends:
+ *   - GPT Image through TeamoRouter (/v1/images/generations and /edits)
+ *   - MiniMax H3-Image, standard or Highspeed (same two endpoints)
+ *
+ * Text-to-image goes through /images/generations; one or more reference images
+ * go through /images/edits (edit, combine, keep a subject consistent). Files are
+ * saved next to the session and only their paths enter the context.
  *
  * Dependencies are Node built-ins only, so the module can be mounted by file
  * URL without installing a package.
@@ -13,81 +15,37 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import {
+  ASPECTS,
+  FORMATS,
+  MODEL_IDS,
+  PROVIDERS,
+  QUALITIES,
+  catalogText,
+  normalizeFormat,
+  planSize,
+  resolveSelection,
+  validateCounts,
+  validatePrompt,
+  validateQuality,
+} from './lib/catalog.js'
 
 export const name = 'image-gen'
 export const inject = ['tools', 'workingDirectory', 'credentials']
 
-const TIERS = { '1k': 1024, '2k': 2048, '4k': 3840 }
-const STEP = 16
-const MIN_PIXELS = 655360
-const MAX_PIXELS = 8294400
-const MAX_SIDE = 3840
-
-const MODELS = [
-  'gpt-image-2.6-sunburst',
-  'gpt-image-2.6-flare',
-  'gpt-image-2.5-sunburst',
-  'gpt-image-2.5-flare',
-  'gpt-image-2',
-  'gpt-image-2.6-sunburst-4k-upscale',
-  'gpt-image-2.6-flare-4k-upscale',
-  'gpt-image-2.5-sunburst-4k-upscale',
-  'gpt-image-2.5-flare-4k-upscale',
-  'gpt-image-2-4k-upscale',
-  'gemini-3-pro-image',
-  'gemini-3.1-flash-image',
-]
-
-const ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']
-const FORMATS = ['png', 'jpeg', 'webp']
-
-const round16 = (n) => Math.max(STEP, Math.round(n / STEP) * STEP)
-const floor16 = (n) => Math.max(STEP, Math.floor(n / STEP) * STEP)
-
-/** Size the upstream accepts: both sides multiples of 16, longest ≤ 3840, pixels inside [655360, 8294400]. */
-function sizeFor(tier, aspect) {
-  const [aw, ah] = aspect.split(':').map(Number)
-  const longest = TIERS[tier]
-  let w
-  let h
-  if (aw >= ah) {
-    w = longest
-    h = round16((longest * ah) / aw)
-  } else {
-    h = longest
-    w = round16((longest * aw) / ah)
-  }
-  if (w * h < MIN_PIXELS) {
-    const k = Math.sqrt(MIN_PIXELS / (w * h))
-    w = round16(w * k)
-    h = round16(h * k)
-  }
-  if (w * h > MAX_PIXELS) {
-    const k = Math.sqrt(MAX_PIXELS / (w * h))
-    w = floor16(w * k)
-    h = floor16(h * k)
-  }
-  if (w > MAX_SIDE || h > MAX_SIDE) {
-    const k = MAX_SIDE / Math.max(w, h)
-    w = floor16(w * k)
-    h = floor16(h * k)
-  }
-  return `${w}x${h}`
+const DEFAULT_CONFIG = {
+  defaultProvider: 'gpt',
+  baseURL: 'https://api.teamorouter.com/v1',
+  keyRef: 'TEAMOROUTER_API_KEY',
+  keyFile: undefined,
+  defaultModel: 'gpt-image-2.6-sunburst',
+  minimaxBaseURL: 'https://api.minimax.cn/v1',
+  minimaxKeyRef: 'MINIMAX_API_KEY',
+  minimaxKeyFile: undefined,
+  minimaxDefaultModel: 'MiniMax-H3-Image',
 }
 
-/** A caller-given WIDTHxHEIGHT, checked against the same rules. */
-function explicitSize(value) {
-  const m = /^(\d+)x(\d+)$/.exec(value.trim())
-  if (m === null) throw new Error(`size must be 1k, 2k, 4k, or WIDTHxHEIGHT such as 1536x1024 (got "${value}")`)
-  const w = Number(m[1])
-  const h = Number(m[2])
-  if (w % STEP !== 0 || h % STEP !== 0) throw new Error(`size sides must be multiples of 16 (got ${w}x${h})`)
-  if (Math.max(w, h) > MAX_SIDE) throw new Error(`size longest side must not exceed ${MAX_SIDE} (got ${w}x${h})`)
-  if (w * h < MIN_PIXELS || w * h > MAX_PIXELS) throw new Error(`size total pixels must be between ${MIN_PIXELS} and ${MAX_PIXELS} (got ${w * h})`)
-  return `${w}x${h}`
-}
-
-/** Read the gateway key from the credentials provider, then a dotenv file. */
+/** Read one key from a dotenv-style file, ignoring comments and blank values. */
 function readDotenv(file, key) {
   let text
   try {
@@ -96,30 +54,29 @@ function readDotenv(file, key) {
     return undefined
   }
   for (const line of text.split('\n')) {
-    const m = /^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/.exec(line)
-    if (m === null || m[1] !== key) continue
-    const value = m[2].replace(/^["']|["']$/g, '').trim()
+    const match = /^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/.exec(line)
+    if (match === null || match[1] !== key) continue
+    const value = match[2].replace(/^["']|["']$/g, '').trim()
     if (value.length > 0) return value
   }
   return undefined
 }
 
-async function resolveKey(ctx, cfg) {
-  const ref = cfg.keyRef ?? 'TEAMOROUTER_API_KEY'
+/** Resolve one provider key: credentials store first, then its dotenv file. */
+async function resolveKey(ctx, backend) {
   try {
-    const credential = await ctx.credentials.resolve(ref)
+    const credential = await ctx.credentials.resolve(backend.keyRef)
     if (credential?.value) return credential.value
   } catch {
     // fall through to the dotenv file
   }
-  const file = cfg.keyFile ?? join(process.env.DSH_HOME ?? '', 'secrets/teamorouter.env')
-  const value = readDotenv(file, ref)
+  const value = readDotenv(backend.keyFile, backend.keyRef)
   if (value) return value
-  throw new Error(`${ref} is not available: set it in the credentials store or in ${file}`)
+  throw new Error(`${backend.keyRef} is not available: set it in the credentials store or in ${backend.keyFile}`)
 }
 
-/** Load one reference image as a Blob for the multipart edit request. */
-async function loadImage(ctx, cwd, input, signal) {
+/** Load one reference image as a Blob for a multipart edit request. */
+async function loadImage(cwd, input, signal) {
   if (/^https?:\/\//i.test(input)) {
     const response = await fetch(input, { signal })
     if (!response.ok) throw new Error(`cannot read reference image ${input}: HTTP ${response.status}`)
@@ -133,8 +90,15 @@ async function loadImage(ctx, cwd, input, signal) {
   } catch (error) {
     throw new Error(`cannot read reference image ${input}: ${error.message}`)
   }
-  const ext = extname(path).toLowerCase()
-  const type = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.webp' ? 'image/webp' : 'image/png'
+  const ext = extname(path.split(/[?#]/)[0]).toLowerCase()
+  const type =
+    ext === '.jpg' || ext === '.jpeg'
+      ? 'image/jpeg'
+      : ext === '.webp'
+        ? 'image/webp'
+        : ext === '.heic' || ext === '.heif'
+          ? 'image/heic'
+          : 'image/png'
   return new Blob([bytes], { type })
 }
 
@@ -148,58 +112,189 @@ function slugOf(text) {
   )
 }
 
-export function apply(ctx, config) {
-  const cfg = {
-    baseURL: 'https://api.teamorouter.com/v1',
-    keyRef: 'TEAMOROUTER_API_KEY',
-    keyFile: undefined,
-    defaultModel: 'gpt-image-2.6-sunburst',
-    ...(config ?? {}),
+function timestamp() {
+  return new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19)
+}
+
+/**
+ * Sniff the delivered bytes. TeamoRouter's GPT 2.6 path returns PNG even when
+ * `output_format: jpeg` is requested, so the file extension must follow the
+ * bytes, not the request.
+ */
+function imageFormatOf(bytes) {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return 'png'
   }
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpeg'
+  if (
+    bytes.length >= 12 &&
+    bytes.toString('ascii', 0, 4) === 'RIFF' &&
+    bytes.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'webp'
+  }
+  return undefined
+}
+
+/** JSON body for text-to-image. */
+function generationBody(plan, prompt) {
+  const body = {
+    model: plan.model,
+    prompt,
+    n: plan.n,
+    output_format: plan.format,
+  }
+  if (plan.provider === 'minimax') {
+    // URL avoids the b64_json total-area cap (n up to 10 at 4K) and is
+    // downloaded immediately, before the 24-hour link expires.
+    body.response_format = 'url'
+    if (plan.size !== undefined) {
+      body.size = plan.size
+    } else {
+      body.size = 'auto'
+      body.area = plan.area
+      body.aspect_ratio = plan.aspectRatio
+    }
+  } else {
+    body.size = plan.size
+    body.quality = plan.quality
+  }
+  return body
+}
+
+/** Multipart form for image editing; reference files use repeated `image` fields. */
+async function editForm(plan, prompt, images, cwd, signal) {
+  const form = new FormData()
+  form.append('model', plan.model)
+  form.append('prompt', prompt)
+  form.append('n', String(plan.n))
+  form.append('output_format', plan.format)
+  if (plan.provider === 'minimax') {
+    form.append('response_format', 'url')
+    if (plan.size !== undefined) {
+      form.append('size', plan.size)
+    } else {
+      form.append('size', 'auto')
+      form.append('area', plan.area)
+      form.append('aspect_ratio', plan.aspectRatio)
+    }
+  } else {
+    form.append('size', plan.size)
+    form.append('quality', plan.quality)
+    form.append('input_fidelity', 'high')
+  }
+  // MiniMax reads repeated `image` fields and keeps their order as Picture 1..N;
+  // TeamoRouter uses the same shape for GPT edits (verified 2026-11-13/14).
+  for (const [index, input] of images.entries()) {
+    const blob = await loadImage(cwd, input, signal)
+    form.append('image', blob, `image-${index}${extname(input.split(/[?#]/)[0]) || '.png'}`)
+  }
+  return form
+}
+
+/** Decode one item from an images response into bytes. */
+async function itemBytes(item, signal) {
+  if (typeof item.b64_json === 'string') return Buffer.from(item.b64_json, 'base64')
+  if (typeof item.url === 'string') {
+    const download = await fetch(item.url, { signal })
+    if (!download.ok) throw new Error(`image URL answered HTTP ${download.status}`)
+    return Buffer.from(await download.arrayBuffer())
+  }
+  return undefined
+}
+
+export function apply(ctx, config) {
+  const cfg = { ...DEFAULT_CONFIG, ...(config ?? {}) }
+  const dshHome = process.env.DSH_HOME ?? ''
+  const backends = {
+    gpt: {
+      baseURL: cfg.baseURL,
+      keyRef: cfg.keyRef,
+      keyFile: cfg.keyFile ?? join(dshHome, PROVIDERS.gpt.keyFile),
+      defaultModel: cfg.defaultModel,
+    },
+    minimax: {
+      baseURL: cfg.minimaxBaseURL,
+      keyRef: cfg.minimaxKeyRef,
+      keyFile: cfg.minimaxKeyFile ?? join(dshHome, PROVIDERS.minimax.keyFile),
+      defaultModel: cfg.minimaxDefaultModel,
+    },
+  }
+
+  ctx.tools.register(defineTool({
+    name: 'image_models',
+    description:
+      'List image providers, models, resolution tiers, capabilities, and the price snapshot used by image_generate. Call it when choosing a provider/model or when cost matters.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          text: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: value.text }],
+    },
+    execute() {
+      return { text: catalogText() }
+    },
+  }))
 
   ctx.tools.register(defineTool({
     name: 'image_generate',
     description:
-      'Generate or edit images with TeamoRouter GPT Image models. Without `images` it draws from the prompt; with `images` (local paths or URLs) it edits or combines them, and passing the same reference each time keeps a subject consistent. Saves files and returns their paths; does not put image bytes in the conversation.',
+      'Generate or edit images with GPT Image (TeamoRouter) or MiniMax H3-Image. Without `images` it draws from the prompt; with `images` (local paths or URLs, up to 16) it edits or combines them, and passing the same reference each time keeps a subject consistent. MiniMax offers a ~16.8MP 4K area at low cost. Saves files and returns their paths; does not put image bytes in the conversation. Call image_models for capabilities and prices.',
     timeoutMs: 900_000,
     parameters: {
       prompt: {
         type: 'string',
         required: true,
-        description: 'What to draw, or how to change the images.',
+        description: 'What to draw, or how to change the images. Up to 32,000 characters.',
+      },
+      provider: {
+        type: 'string',
+        enum: ['gpt', 'minimax'],
+        description:
+          'Backend: gpt (default; TeamoRouter GPT Image 2.x, also Gemini image models) or minimax (MiniMax H3-Image). Inferred from model when model is given.',
+      },
+      model: {
+        type: 'string',
+        enum: MODEL_IDS,
+        description:
+          'Exact model id. Defaults: gpt-image-2.6-sunburst (gpt), MiniMax-H3-Image (minimax). GPT *-4k-upscale variants add 4K detail; MiniMax-H3-Image-Highspeed is faster at about 1.5-2x the standard price. See image_models.',
       },
       images: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Reference or source images: local paths or http(s) URLs. One image edits it; several combine them (a subject from each). Omit for text-to-image.',
+        description:
+          'Reference or source images: local paths or http(s) URLs. One image edits it; several combine them (a subject from each). Up to 16; omit for text-to-image.',
       },
       size: {
         type: 'string',
-        description: 'Resolution: 1k, 2k, 4k, or WIDTHxHEIGHT such as 1536x1024. Billing tier follows the longest side (≤1024 1K, ≤2048 2K, above 4K). Default 1k.',
+        description:
+          'Resolution tier or explicit WIDTHxHEIGHT. Default 1k. gpt: 1k/2k/4k map to longest side 1024/2048/3840; explicit sizes need multiples of 16, longest <=3840, total 655,360-8,294,400px. minimax: 1k/2k/4k are area tiers (4K = 4096^2); explicit sizes need 655,360-20,000,000px and aspect 1:3-3:1. MiniMax 4K has about 2x GPT 4K pixels.',
       },
       aspect: {
         type: 'string',
         enum: ASPECTS,
-        description: 'Shape used when size is a tier. Default 1:1.',
+        description: 'Shape for tier sizes; ignored with explicit WIDTHxHEIGHT. Default 1:1.',
       },
       quality: {
         type: 'string',
-        enum: ['auto', 'low', 'medium', 'high'],
-        description: 'Render effort; higher costs more. Default auto.',
+        enum: QUALITIES,
+        description:
+          'gpt only: auto (default), low, medium, high; higher costs more. minimax has no quality level and accepts only auto.',
       },
       n: {
         type: 'integer',
-        description: 'Images per call, 1 to 4. Default 1.',
+        description: 'Images per call: 1-4 for gpt, 1-10 for minimax. Default 1.',
       },
       format: {
         type: 'string',
         enum: FORMATS,
-        description: 'File format of the saved images. Default png.',
-      },
-      model: {
-        type: 'string',
-        enum: MODELS,
-        description: 'Image model; use a -4k-upscale model for 4K detail. Default gpt-image-2.6-sunburst.',
+        description:
+          "png (default), jpeg, webp. MiniMax honors it; GPT models may return PNG regardless. The saved extension and returned format follow the actual bytes.",
       },
       out_dir: {
         type: 'string',
@@ -216,69 +311,88 @@ export function apply(ctx, config) {
             items: { type: 'string' },
             required: true,
           },
+          provider: { type: 'string', required: true },
           size: { type: 'string', required: true },
           model: { type: 'string', required: true },
-          quality: { type: 'string', required: true },
+          format: { type: 'string' },
+          billing_tier: { type: 'string' },
+          quality: { type: 'string' },
           revised_prompt: { type: 'string' },
+          failed: {
+            type: 'array',
+            items: { type: 'string' },
+          },
         },
       },
-      render: (_args, value) => [
-        {
-          type: 'text',
-          text: `Saved ${value.files.length} image(s) at ${value.size} with ${value.model}: ${value.files.join(', ')}`,
-        },
-      ],
+      render: (_args, value) => {
+        const billed =
+          value.billing_tier === undefined
+            ? ''
+            : ` (${value.provider === 'minimax' ? 'area' : 'billed as'} ${value.billing_tier})`
+        const failed =
+          value.failed === undefined || value.failed.length === 0
+            ? ''
+            : `; ${value.failed.length} failed: ${value.failed.join('; ')}`
+        return [
+          {
+            type: 'text',
+            text: `Saved ${value.files.length} image(s) at ${value.size}${billed} with ${value.model} via ${value.provider}: ${value.files.join(', ')}${failed}`,
+          },
+        ]
+      },
     },
     async execute(args, exec) {
-      const cwd = exec.agent === undefined ? process.cwd() : await ctx.workingDirectory.ensure(exec.agent, exec.signal)
-      const key = await resolveKey(ctx, cfg)
+      const cwd =
+        exec.agent === undefined ? process.cwd() : await ctx.workingDirectory.ensure(exec.agent, exec.signal)
+      const selection = resolveSelection({
+        provider: args.provider,
+        model: args.model,
+        defaults: {
+          provider: cfg.defaultProvider,
+          gpt: backends.gpt.defaultModel,
+          minimax: backends.minimax.defaultModel,
+        },
+      })
+      const { provider, model, entry, profile } = selection
+      const backend = backends[provider]
 
-      const model = args.model ?? cfg.defaultModel
-      const quality = args.quality ?? 'auto'
-      const format = args.format ?? 'png'
-      const aspect = args.aspect ?? '1:1'
-      const tier = (args.size ?? '1k').trim().toLowerCase()
-      const size = tier in TIERS ? sizeFor(tier, aspect) : explicitSize(tier)
+      validatePrompt(args.prompt)
+      const quality = validateQuality(provider, args.quality)
       const n = args.n ?? 1
-      if (!Number.isInteger(n) || n < 1 || n > 4) throw new Error(`n must be an integer from 1 to 4 (got ${n})`)
-
-      const outDir = args.out_dir === undefined ? join(cwd, 'generated-images') : resolve(cwd, args.out_dir)
       const images = args.images ?? []
+      validateCounts(provider, n, images.length)
+      const format = args.format ?? 'png'
+      const sizePlan = planSize(provider, args.size, args.aspect ?? '1:1')
+      const plan = { provider, model, n, format, quality, ...sizePlan }
+
+      const key = await resolveKey(ctx, backend)
+      const baseURL = backend.baseURL.replace(/\/$/, '')
+      const apiLabel = profile.apiLabel
 
       let response
-      if (images.length > 0) {
-        const form = new FormData()
-        form.append('model', model)
-        form.append('prompt', args.prompt)
-        form.append('size', size)
-        form.append('quality', quality)
-        form.append('n', String(n))
-        form.append('output_format', format)
-        form.append('input_fidelity', 'high')
-        // The edits endpoint takes reference images as repeated `image` fields,
-        // not as one `image[]` or `image[0]` field. Verified against TeamoRouter
-        // 2026-11-13: two references sent as repeated `image` fields are both
-        // read (input image tokens double); a single `image[]` array is not.
-        for (const [index, input] of images.entries()) {
-          const blob = await loadImage(ctx, cwd, input, exec.signal)
-          form.append('image', blob, `image-${index}${extname(input) || '.png'}`)
+      try {
+        if (images.length > 0) {
+          const form = await editForm(plan, args.prompt, images, cwd, exec.signal)
+          response = await fetch(`${baseURL}/images/edits`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${key}` },
+            body: form,
+            signal: exec.signal,
+          })
+        } else {
+          response = await fetch(`${baseURL}/images/generations`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${key}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(generationBody(plan, args.prompt)),
+            signal: exec.signal,
+          })
         }
-        response = await fetch(`${cfg.baseURL.replace(/\/$/, '')}/images/edits`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${key}` },
-          body: form,
-          signal: exec.signal,
-        })
-      } else {
-        response = await fetch(`${cfg.baseURL.replace(/\/$/, '')}/images/generations`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${key}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ model, prompt: args.prompt, size, quality, n, output_format: format }),
-          signal: exec.signal,
-        })
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error
+        throw new Error(`${apiLabel} request failed: ${error.message}`)
       }
 
       const raw = await response.text()
@@ -286,42 +400,85 @@ export function apply(ctx, config) {
       try {
         payload = JSON.parse(raw)
       } catch {
-        throw new Error(`TeamRouter answered HTTP ${response.status}: ${raw.slice(0, 300)}`)
+        throw new Error(`${apiLabel} answered HTTP ${response.status}: ${raw.slice(0, 300)}`)
       }
       if (!response.ok) {
         const message = payload?.error?.message ?? JSON.stringify(payload).slice(0, 300)
-        throw new Error(`TeamRouter ${response.status}: ${message}`)
+        const itemErrors = Array.isArray(payload?.data)
+          ? payload.data
+              .filter((item) => item?.error !== undefined)
+              .map((item) => `${item.error.code ?? 'error'}: ${item.error.message ?? 'failed'}`)
+              .join('; ')
+          : ''
+        throw new Error(`${apiLabel} ${response.status}: ${message}${itemErrors.length > 0 ? ` (${itemErrors})` : ''}`)
       }
 
       const items = Array.isArray(payload.data) ? payload.data : []
-      if (items.length === 0) throw new Error('TeamRouter returned no image')
+      if (items.length === 0) throw new Error(`${apiLabel} returned no image`)
+
+      const outDir = args.out_dir === undefined ? join(cwd, 'generated-images') : resolve(cwd, args.out_dir)
       mkdirSync(outDir, { recursive: true })
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19)
+      const stamp = timestamp()
       const slug = slugOf(args.prompt)
-      const ext = format === 'jpeg' ? 'jpg' : format
+      const responseFormat = normalizeFormat(payload.output_format) ?? format
       const files = []
+      const failures = []
+      const actualFormats = []
+      let actualSize
+      let revisedPrompt
+
       for (const [index, item] of items.entries()) {
-        let bytes
-        if (typeof item.b64_json === 'string') {
-          bytes = Buffer.from(item.b64_json, 'base64')
-        } else if (typeof item.url === 'string') {
-          const download = await fetch(item.url, { signal: exec.signal })
-          if (!download.ok) throw new Error(`TeamRouter image URL answered HTTP ${download.status}`)
-          bytes = Buffer.from(await download.arrayBuffer())
-        } else {
-          throw new Error('TeamRouter returned an image without b64_json or url')
+        if (item === null || typeof item !== 'object') {
+          failures.push(`image ${index + 1}: empty result`)
+          continue
         }
+        if (item.error !== undefined && item.b64_json === undefined && item.url === undefined) {
+          const detail = item.error.message ?? item.error.code ?? 'failed'
+          failures.push(`image ${index + 1}: ${detail}`)
+          continue
+        }
+        let bytes
+        try {
+          bytes = await itemBytes(item, exec.signal)
+        } catch (error) {
+          failures.push(`image ${index + 1}: ${error.message}`)
+          continue
+        }
+        if (bytes === undefined) {
+          failures.push(`image ${index + 1}: no b64_json or url`)
+          continue
+        }
+        const actualFormat = imageFormatOf(bytes) ?? responseFormat
+        const ext = actualFormat === 'jpeg' ? 'jpg' : actualFormat
         const file = join(outDir, `${stamp}-${slug}${items.length > 1 ? `-${index + 1}` : ''}.${ext}`)
         writeFileSync(file, bytes)
         files.push(file)
+        actualFormats.push(actualFormat)
+        if (actualSize === undefined && typeof item.size === 'string') actualSize = item.size
+        if (revisedPrompt === undefined && typeof item.revised_prompt === 'string') {
+          revisedPrompt = item.revised_prompt
+        }
       }
+
+      if (files.length === 0) {
+        throw new Error(`${apiLabel} returned no usable image: ${failures.join('; ') || 'empty result'}`)
+      }
+
+      // Gemini image models are token-billed, so their size tier is not a
+      // billing tier; only report it for per-image GPT models and MiniMax areas.
+      const billingTier =
+        provider === 'gpt' && entry.pricing.mode === 'token' ? undefined : plan.billingTier
 
       return {
         files,
-        size: typeof payload.size === 'string' && payload.size.length > 0 ? payload.size : size,
+        provider,
+        size: actualSize ?? plan.size ?? plan.area ?? 'unknown',
         model,
-        quality: typeof payload.quality === 'string' && payload.quality.length > 0 ? payload.quality : quality,
-        ...(typeof items[0].revised_prompt === 'string' ? { revised_prompt: items[0].revised_prompt } : {}),
+        format: actualFormats[0],
+        ...(billingTier === undefined ? {} : { billing_tier: billingTier }),
+        ...(quality === undefined ? {} : { quality }),
+        ...(revisedPrompt === undefined ? {} : { revised_prompt: revisedPrompt }),
+        ...(failures.length === 0 ? {} : { failed: failures }),
       }
     },
   }))

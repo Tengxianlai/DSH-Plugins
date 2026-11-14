@@ -1,7 +1,10 @@
-# dsh-image-gen：用 TeamoRouter 的 OpenAI 兼容 Images API 替代 magpie 的 image MCP。
-# 密钥走凭据存储的 TEAMOROUTER_API_KEY（缺省时回退 ~/.dsh-wsl/secrets/teamorouter.env）。
+# dsh-image-gen：GPT Image（TeamoRouter）与 MiniMax H3-Image 的生图/改图工具。
+# 密钥走凭据存储的 TEAMOROUTER_API_KEY / MINIMAX_API_KEY；
+# 缺省时分别回退 $DSH_HOME/secrets/teamorouter.env 与 $DSH_HOME/secrets/minimax.env。
 - insert:
     - id: image-gen
       name: dsh-image-gen
       config:
+        defaultProvider: gpt
         baseURL: https://api.teamorouter.com/v1
+        minimaxBaseURL: https://api.minimax.cn/v1

@@ -1,8 +1,8 @@
 {
   "name": "dsh-image-gen",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "TeamoRouter 图像生成/编辑工具：一次调用出图或图生图，文件落盘，图片字节不进上下文。",
+  "description": "GPT（TeamoRouter）与 MiniMax H3-Image 生图/改图工具：一个工具切换后端，模型、档位与价格快照内建。",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -18,6 +18,7 @@
   },
   "files": [
     "index.js",
+    "lib",
     "cordis.patch.yml",
     "README.md"
   ],
