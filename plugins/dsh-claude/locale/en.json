@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Claude outside expert",
+    "description": "When a problem is hard, you have been refuted, you are stuck, or the user asks: hand a complete brief to Claude Opus 5.5 with extended reasoning. Text, images, and PDFs; prompt caching is on by default.",
+    "detail": "docs/DETAIL.md"
+  }
+}

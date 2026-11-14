@@ -1,0 +1,7 @@
+# dsh-claude：Claude Opus 5.5 外场专家工具 + `external-expert` 技能。
+# 密钥走凭据存储的 TEAMOROUTER_API_KEY，缺失时回退 $DSH_HOME/secrets/teamorouter.env。
+- insert:
+    - id: claude
+      name: dsh-claude
+      config:
+        baseURL: https://api.teamorouter.com/v1

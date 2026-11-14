@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Claude 外场专家",
+    "description": "难题、被反复反驳、卡住或用户点名时，把完整 brief 交给 Claude Opus 5.5 深度推理；支持图片、PDF、文本，提示缓存默认开启。",
+    "detail": "docs/DETAIL.md"
+  }
+}
