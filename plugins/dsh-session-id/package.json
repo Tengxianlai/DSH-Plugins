@@ -4,6 +4,7 @@
   "private": true,
   "description": "DSH Web 会话标题栏显示当前会话 ID（截断显示），点击复制完整 session id。",
   "type": "module",
+  "icon": "icon.svg",
   "main": "index.js",
   "exports": {
     ".": {
@@ -24,7 +25,8 @@
     "index.js",
     "client.js",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "icon.svg"
   ],
   "engines": {
     "node": ">=22.19.0"

@@ -4,6 +4,7 @@
   "private": true,
   "description": "DSH Web 的「下载」动作：交付卡片、变更文件卡片与预览标题栏各加一个下载入口，经认证路由把文件以附件形式交给浏览器（远程访问也能真正拿到文件）。",
   "type": "module",
+  "icon": "icon.svg",
   "main": "lib/index.js",
   "exports": {
     ".": {
@@ -29,6 +30,7 @@
     "lib",
     "client.js",
     "cordis.patch.yml",
+    "icon.svg",
     "README.md",
     "STATE.md"
   ],

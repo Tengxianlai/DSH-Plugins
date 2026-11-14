@@ -6,7 +6,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -94,6 +94,27 @@ for (const dir of plugins) {
 
   if (existsSync(join(dir, 'README.md'))) ok('README.md');
   else fail(id, '缺少 README.md');
+
+  // 图标：package.json 顶层 icon 优先，其次 exports["./icon"]；格式/大小/是否解包与 Plugin Manager 一致。
+  const iconRef = typeof manifest.icon === 'string' ? manifest.icon : manifest.exports?.['./icon'];
+  if (typeof iconRef === 'string') {
+    const iconPath = resolve(dir, iconRef);
+    const inside = relative(dir, iconPath);
+    const ext = extname(iconPath).toLowerCase();
+    if (isAbsolute(iconRef) || inside === '..' || inside.startsWith(`..${sep}`)) {
+      fail(id, `图标必须在插件目录内：${iconRef}`);
+    } else if (!['.svg', '.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
+      fail(id, `图标格式只支持 SVG/PNG/JPEG/WebP：${iconRef}`);
+    } else if (!existsSync(iconPath)) {
+      fail(id, `图标文件不存在：${iconRef}`);
+    } else {
+      const bytes = statSync(iconPath).size;
+      const body = ext === '.svg' ? readFileSync(iconPath, 'utf8') : '';
+      if (bytes > 256 * 1024) fail(id, `图标超过 256 KiB：${iconRef}（${bytes} B）`);
+      else if (ext === '.svg' && !/<svg[\s>]/i.test(body)) fail(id, `图标不是合法的 SVG：${iconRef}`);
+      else ok(`图标 ${iconRef}（${bytes} B）`);
+    }
+  }
 
   const hasSelfTest = typeof manifest.scripts?.verify === 'string' && existsSync(join(dir, 'scripts/verify.mjs'));
   const testDir = join(dir, 'test');

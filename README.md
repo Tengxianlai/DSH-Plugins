@@ -14,6 +14,10 @@ profile 上；挂载行写在插件自己的 `cordis.patch.yml` 里，profile �
 | `dsh-gemini` | 0.3.0 | host | Gemini 4 Argon 多模态工具：写、看、读、对照；图片/PDF/片段/文本，自然语言提问 |
 | `dsh-gemini-creative` | 0.3.0 | host | 按需加载的创作与审看技能：写剧本/文案，或拿场景图、分镜、PDF 与剧本对照 |
 
+每个插件都带一张 36×36 的 `icon.svg`（青绿 `#2f6f6a` 主体 + 米白 `#f4f1e8` 细节 + 琥珀 `#d99a2b`
+点缀），在 `package.json` 顶层用 `icon` 声明；Plugin Manager 和设置页据此显示插件行图标，
+`npm run verify` 会校验它存在、在包内、格式与体积合规。
+
 ## 装机状态（profile `web`）
 
 | 项 | 值 |
@@ -22,6 +26,9 @@ profile 上；挂载行写在插件自己的 `cordis.patch.yml` 里，profile �
 | 依赖形态 | `link:` → 本仓 `plugins/<name>/` |
 | 挂载通道 | bundle（`dsh.profile.bundles`） |
 | 生效条件 | 重启 dsh-web；浏览器半边刷新页面 |
+
+> 本机（macOS Desktop 应用）当前生效的是 profile `desktop`：`~/.dsh/profiles/desktop`，
+> 插件同样以 `link:` 指向本仓；`~/.dsh-wsl` 在这台机器上不存在。改 profile 前先看 `$DSH_PROFILE_DIR`。
 
 ## 常用命令
 
