@@ -194,7 +194,12 @@ profile 的挂载行只需要覆盖要改的项，例如：
 
 1. 凭据存储里的 `TEAMOROUTER_API_KEY` / `MINIMAX_API_KEY`；
 2. 默认 dotenv：`$DSH_HOME/secrets/teamorouter.env` / `$DSH_HOME/secrets/minimax.env`；
+   宿主进程没有 `DSH_HOME` 时回退到 `~/.dsh/secrets/`（用 `HOME`/`homedir()` 拼 `.dsh`）；
 3. 都没有则报错，并在错误里给出缺失的变量名和文件路径。
+
+> Desktop 宿主进程通常只继承 `HOME`，不会继承 shell 里的 `DSH_HOME`。如果 key 明明放在
+> `~/.dsh/secrets/minimax.env` 却报 `MINIMAX_API_KEY is not available`，先检查错误里打印的路径是不是
+> 相对路径 `secrets/minimax.env`；插件现在按 `DSH_HOME` → `~/.dsh` 回退，不会再依赖 shell 环境。
 
 本机 `MINIMAX_API_KEY` 在 `~/.dsh/secrets/minimax.env`（中国区），`TEAMOROUTER_API_KEY`
 在凭据库或 `~/.dsh/secrets/teamorouter.env`。MiniMax 全球区账号把 `minimaxBaseURL`

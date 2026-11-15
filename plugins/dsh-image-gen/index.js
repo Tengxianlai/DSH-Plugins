@@ -13,6 +13,7 @@
  * URL without installing a package.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { extname, join, resolve } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import {
@@ -32,6 +33,20 @@ import {
 
 export const name = 'image-gen'
 export const inject = ['tools', 'workingDirectory', 'credentials']
+
+/**
+ * DSH home for the dotenv key fallback.
+ *
+ * The Desktop host does not inherit the shell-only `DSH_HOME` variable; its
+ * environment normally has only HOME. Fall back to the default `~/.dsh` so a
+ * key placed in `~/.dsh/secrets/*.env` is found without a credentials-store
+ * entry. A configured DSH_HOME always wins.
+ */
+export function dshHomePath() {
+  const configured = process.env.DSH_HOME
+  if (configured !== undefined && configured.length > 0) return configured
+  return join(process.env.HOME || homedir(), '.dsh')
+}
 
 const DEFAULT_CONFIG = {
   defaultProvider: 'gpt',
@@ -205,7 +220,7 @@ async function itemBytes(item, signal) {
 
 export function apply(ctx, config) {
   const cfg = { ...DEFAULT_CONFIG, ...(config ?? {}) }
-  const dshHome = process.env.DSH_HOME ?? ''
+  const dshHome = dshHomePath()
   const backends = {
     gpt: {
       baseURL: cfg.baseURL,

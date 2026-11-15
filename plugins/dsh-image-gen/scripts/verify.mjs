@@ -1,7 +1,9 @@
 // 轻量自检：入口可加载、两个工具可注册、provider/model 解析与尺寸/计费规则符合
 // 2026-11-14 的文档快照。不发起网络请求，所以离线、零成本、可重复。
 import { strict as assert } from 'node:assert'
-import { apply, inject, name } from '../index.js'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { apply, dshHomePath, inject, name } from '../index.js'
 import {
   ASPECTS,
   MINIMAX_4K_PROMO,
@@ -22,6 +24,25 @@ import {
 assert.equal(name, 'image-gen')
 assert.deepEqual(inject, ['tools', 'workingDirectory', 'credentials'])
 assert.equal(typeof apply, 'function')
+
+// --- dotenv fallback path: the Desktop host has HOME but no DSH_HOME ----
+const savedDshHome = process.env.DSH_HOME
+const savedHome = process.env.HOME
+try {
+  delete process.env.DSH_HOME
+  process.env.HOME = '/tmp/dsh-home-test'
+  assert.equal(dshHomePath(), '/tmp/dsh-home-test/.dsh')
+  process.env.DSH_HOME = '/tmp/custom-dsh'
+  assert.equal(dshHomePath(), '/tmp/custom-dsh')
+  delete process.env.DSH_HOME
+  process.env.HOME = ''
+  assert.equal(dshHomePath(), join(homedir(), '.dsh'))
+} finally {
+  if (savedDshHome === undefined) delete process.env.DSH_HOME
+  else process.env.DSH_HOME = savedDshHome
+  if (savedHome === undefined) delete process.env.HOME
+  else process.env.HOME = savedHome
+}
 
 // --- tool registration and model-facing schemas -------------------------
 const definitions = []
