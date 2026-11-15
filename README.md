@@ -10,7 +10,7 @@ profile 上；挂载行写在插件自己的 `cordis.patch.yml` 里，profile �
 | `dsh-deliverable-download` | 0.1.0 | host + web | 交付/变更卡片与预览标题栏的「下载」动作，经认证路由以附件下发 |
 | `dsh-playwright-per-agent` | 0.2.0 | host | 在每个根 agent 上下文里挂 Playwright MCP |
 | `dsh-session-id` | 0.1.0 | host + web | 会话标题栏显示当前 session id，点击复制 |
-| `dsh-image-gen` | 0.2.0 | host | GPT（TeamoRouter）与 MiniMax H3-Image 生图/改图：一个工具切换后端，模型、档位与价格快照内建 |
+| `dsh-image-gen` | 0.2.1 | host | GPT（TeamoRouter）与 MiniMax H3-Image 生图/改图：一个工具切换后端，模型、档位与价格快照内建 |
 | `dsh-minimax-video` | 0.1.0 | host | MiniMax H3 视频：四档模型、480P/768P/2K、首尾帧与多模态参考、768P→2K 再生成，以及提示词/运镜/类型配方 skill |
 | `dsh-gemini` | 0.3.0 | host | Gemini 4 Argon 多模态工具：写、看、读、对照；图片/PDF/片段/文本，自然语言提问 |
 | `dsh-gemini-creative` | 0.3.0 | host | 按需加载的创作与审看技能：写剧本/文案，或拿场景图、分镜、PDF 与剧本对照 |
