@@ -11,9 +11,11 @@ profile 上；挂载行写在插件自己的 `cordis.patch.yml` 里，profile �
 | `dsh-playwright-per-agent` | 0.2.0 | host | 在每个根 agent 上下文里挂 Playwright MCP |
 | `dsh-session-id` | 0.1.0 | host + web | 会话标题栏显示当前 session id，点击复制 |
 | `dsh-image-gen` | 0.2.0 | host | GPT（TeamoRouter）与 MiniMax H3-Image 生图/改图：一个工具切换后端，模型、档位与价格快照内建 |
+| `dsh-minimax-video` | 0.1.0 | host | MiniMax H3 视频：四档模型、480P/768P/2K、首尾帧与多模态参考、768P→2K 再生成，以及提示词/运镜/类型配方 skill |
 | `dsh-gemini` | 0.3.0 | host | Gemini 4 Argon 多模态工具：写、看、读、对照；图片/PDF/片段/文本，自然语言提问 |
 | `dsh-gemini-creative` | 0.3.0 | host | 按需加载的创作与审看技能：写剧本/文案，或拿场景图、分镜、PDF 与剧本对照 |
 | `dsh-claude` | 0.1.0 | host | Claude Opus 5.5 外场专家：难题、多次被反驳、卡住或用户点名时的第二意见；图片/PDF/文本，扩展推理与提示缓存默认开启 |
+| `dsh-notify` | 0.3.0 | host + web | 本轮完成 / 出错 / 等待审批 / 等待回答时提醒，四类各有音效；横幅走页面（DSH 图标、可点击聚焦），声音走宿主 |
 
 每个插件都带一张 36×36 的 `icon.svg`（青绿 `#2f6f6a` 主体 + 米白 `#f4f1e8` 细节 + 琥珀 `#d99a2b`
 点缀），在 `package.json` 顶层用 `icon` 声明；Plugin Manager 和设置页据此显示插件行图标，
