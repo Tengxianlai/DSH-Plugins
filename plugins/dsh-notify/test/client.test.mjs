@@ -306,6 +306,53 @@ test('通知权限被明确拒绝时不弹（声音仍走页面）', () => {
   assert.ok(oscillators.length >= 2, '横幅没有，声音不能没有')
 })
 
+test('自测计划：10 条、四类轮流、声音类别跟着走', () => {
+  const plugin = envelope.factory(() => {})
+  const payloads = plugin.buildTestPayloads()
+  assert.equal(payloads.length, 10)
+  assert.deepEqual(
+    payloads.map((payload) => payload.kind),
+    ['turn', 'error', 'approval', 'question', 'turn', 'error', 'approval', 'question', 'turn', 'error'],
+  )
+  assert.equal(payloads[0].title, '【自测 1/10】本轮完成')
+  for (const payload of payloads) {
+    assert.ok(payload.title.includes('自测'))
+    assert.equal(payload.sound, payload.kind)
+  }
+  assert.equal(plugin.TEST_HASH, '#dsh-notify-test')
+})
+
+test('自测每 10 秒一条，10 条后自动停表', () => {
+  reset()
+  const timers = []
+  const originalSetInterval = globalThis.setInterval
+  const originalClearInterval = globalThis.clearInterval
+  const originalInfo = console.info
+  globalThis.setInterval = (fn, ms) => {
+    timers.push({ fn, ms, cleared: false })
+    return timers.length
+  }
+  globalThis.clearInterval = (id) => {
+    const timer = timers[id - 1]
+    if (timer !== undefined) timer.cleared = true
+  }
+  console.info = () => {}
+  try {
+    const plugin = envelope.factory(() => {})
+    const stop = plugin.startSelfTest()
+    assert.equal(timers.length, 1)
+    assert.equal(timers[0].ms, 10_000)
+    for (let round = 0; round < 12; round += 1) timers[0].fn()
+    assert.equal(notifications.length, 10)
+    assert.equal(timers[0].cleared, true)
+    stop()
+  } finally {
+    globalThis.setInterval = originalSetInterval
+    globalThis.clearInterval = originalClearInterval
+    console.info = originalInfo
+  }
+})
+
 test('坏帧与缺标题的帧被丢弃', () => {
   reset()
   const { plugin } = mount()

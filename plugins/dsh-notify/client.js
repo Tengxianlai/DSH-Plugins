@@ -66,6 +66,72 @@ window.__ModuleLoader__.load({
     /** 通知权限只申请一次，用户拒绝后不再骚扰。 */
     let permissionRequested = false
 
+    /** 自测模式：URL 带这个 hash 时，首次点击后自动跑一遍四类提醒。 */
+    const TEST_HASH = '#dsh-notify-test'
+
+    /** 自测节奏：10 条，每 10 秒一条，四类轮流。 */
+    const TEST_INTERVAL_MS = 10_000
+    const TEST_ROUNDS = 10
+    const TEST_KINDS = ['turn', 'error', 'approval', 'question']
+    /** 自测最多等多久让用户处理通知权限弹窗；等不到也照跑（只剩声音）。 */
+    const TEST_PERMISSION_WAIT_MS = 15_000
+    const TEST_LABELS = {
+      turn: '本轮完成',
+      error: '本轮出错',
+      approval: '需要审批',
+      question: '等待回答',
+    }
+
+    /** 自测是否已经起跑，避免一次页面里跑出两套。 */
+    let selfTestStarted = false
+
+    /**
+     * 生成自测用的 10 条提醒；四类轮流，标题带序号，便于对着通知中心核对。
+     *
+     * @param {number} [rounds] - 轮数；默认 {@link TEST_ROUNDS}。
+     * @returns {object[]} SSE 帧形状的载荷（`title`/`body`/`kind`/`sound`）。
+     */
+    function buildTestPayloads(rounds = TEST_ROUNDS) {
+      return Array.from({ length: rounds }, (_, index) => {
+        const kind = TEST_KINDS[index % TEST_KINDS.length]
+        return {
+          title: `【自测 ${index + 1}/${rounds}】${TEST_LABELS[kind]}`,
+          body: '这是 dsh-notify 的自测通知，10 秒后下一条',
+          kind,
+          sound: kind,
+        }
+      })
+    }
+
+    /**
+     * 开跑自测：每 {@link TEST_INTERVAL_MS} 毫秒发一条，走的是和真实提醒完全相同的
+     * {@link handle} 路径（页面横幅 + Web Audio）。
+     *
+     * @returns {Function} 取消自测的函数。
+     */
+    function startSelfTest() {
+      if (selfTestStarted) return () => {}
+      selfTestStarted = true
+      const payloads = buildTestPayloads()
+      let index = 0
+      const timer = setInterval(() => {
+        const payload = payloads[index]
+        if (payload === undefined) {
+          clearInterval(timer)
+          console.info('dsh-notify: 自测完成（10 条）')
+          return
+        }
+        index += 1
+        console.info(`dsh-notify: 自测 ${index}/${payloads.length} · ${payload.kind}`)
+        handle(payload)
+      }, TEST_INTERVAL_MS)
+      console.info('dsh-notify: 自测开始，每 10 秒一条，共 10 条')
+      return () => {
+        clearInterval(timer)
+        selfTestStarted = false
+      }
+    }
+
     /**
      * 取（必要时创建）AudioContext。
      *
@@ -268,14 +334,41 @@ window.__ModuleLoader__.load({
         }, 'dsh-notify: banner stream')
       }
       if (typeof window === 'object' && window !== null && typeof window.addEventListener === 'function') {
+        const wantsSelfTest = window.location?.hash === TEST_HASH
+        if (wantsSelfTest) {
+          console.info('dsh-notify: 自测模式——点一下页面，2.5 秒后开始 10 条测试（每 10 秒一条）')
+        }
         ctx.effect(() => {
+          /** 自测的起跑计时器；点过第一次后不再重排。 */
+          let startTimer
+          /** 自测的取消函数。 */
+          let disposeTest
           const onGesture = () => {
             unlockAudio()
             requestPermission()
+            // 自测要等权限弹窗处理完再跑（浏览器不会在没手势时给权限），只排一次。
+            if (!wantsSelfTest || startTimer !== undefined || disposeTest !== undefined) return
+            const deadline = Date.now() + TEST_PERMISSION_WAIT_MS
+            const begin = () => {
+              // 权限弹窗还开着就先等，别把前几条测试通知丢在浏览器门口。
+              if (
+                typeof Notification !== 'undefined' &&
+                Notification.permission === 'default' &&
+                Date.now() < deadline
+              ) {
+                startTimer = setTimeout(begin, 500)
+                return
+              }
+              startTimer = undefined
+              disposeTest = startSelfTest()
+            }
+            startTimer = setTimeout(begin, 2500)
           }
           const events = ['pointerdown', 'keydown']
           for (const type of events) window.addEventListener(type, onGesture, { passive: true })
           return () => {
+            clearTimeout(startTimer)
+            disposeTest?.()
             for (const type of events) window.removeEventListener(type, onGesture)
           }
         }, 'dsh-notify: audio unlock & notification permission')
@@ -290,7 +383,10 @@ window.__ModuleLoader__.load({
     exports.unlockAudio = unlockAudio
     exports.requestPermission = requestPermission
     exports.parseFrame = parseFrame
+    exports.buildTestPayloads = buildTestPayloads
+    exports.startSelfTest = startSelfTest
     exports.CUES = CUES
+    exports.TEST_HASH = TEST_HASH
     exports.EVENTS_PATH = EVENTS_PATH
     return exports
   },

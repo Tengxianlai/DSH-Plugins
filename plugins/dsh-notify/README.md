@@ -148,3 +148,15 @@ node test/client.test.mjs
 
 自测全部在假 ctx / 假 notifier / 假 EventSource / 假 AudioContext / 假 spawn 上跑，不弹通知也不放音；
 `node test/client.test.mjs` 会核对四类音色与静音/兜底逻辑。
+
+### 在浏览器里跑 10 条真机自测
+
+想知道 Windows/桌面端的横幅和提示音到底通不通，用这个 opt-in 模式（不带 hash 时完全不生效）：
+
+1. 地址后面加 `#dsh-notify-test`，例如 `https://dsh.soarteng.cn/#dsh-notify-test`，回车后**刷新一次**
+   （`client.js` 在 dsh-web 启动时读盘，改了插件必须重启 dsh-web，再刷新页面）。
+2. 在页面上点一下：这一步会解锁 AudioContext 并弹出通知权限，允许它。
+3. 2.5 秒后开始，**每 10 秒一条，四类轮流，共 10 条**；走的是和真实提醒完全相同的
+   `handle()` 路径（页面横幅 + Web Audio 提示音），控制台会打印 `【自测 i/10】`。
+
+自测只影响这一次页面加载；关掉或重新打开不带 hash 的地址就恢复原样。
