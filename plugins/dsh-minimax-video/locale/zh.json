@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "MiniMax H3 视频",
+    "description": "从文本、首尾帧或多模态参考生成 MiniMax H3（海螺 3）视频；内建档位/清晰度/价格目录、768P→2K 再生成通道，以及提示词、运镜与类型配方 skill。",
+    "detail": "docs/DETAIL.md"
+  }
+}

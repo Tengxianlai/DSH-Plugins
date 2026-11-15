@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "MiniMax H3 video",
+    "description": "Generate, query and regenerate MiniMax H3 (Hailuo 3) video from text, first/last frames or reference media, with a tier and price catalog, 768P-to-2K regeneration and a prompt-directing skill.",
+    "detail": "docs/DETAIL.md"
+  }
+}

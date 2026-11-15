@@ -1,0 +1,8 @@
+# dsh-minimax-video：MiniMax H3 视频生成 / 查询 / 768P→2K 再生成 / Context-IR 提示词增强。
+# 密钥走凭据存储的 MINIMAX_API_KEY；缺省回退 $DSH_HOME/secrets/minimax.env。
+# baseURL 决定计费区域：api.minimax.cn（¥）或 api.minimax.io（$）。
+- insert:
+    - id: minimax-video
+      name: dsh-minimax-video
+      config:
+        baseURL: https://api.minimax.cn

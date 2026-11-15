@@ -1,0 +1,42 @@
+{
+  "name": "dsh-minimax-video",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MiniMax H3 (Hailuo 3) 视频工具：四档模型、480P/768P/2K、首尾帧与多模态参考、768P→2K 再生成，以及提示词/运镜/类型配方 skill。",
+  "type": "module",
+  "icon": "icon.svg",
+  "main": "index.js",
+  "exports": {
+    ".": {
+      "default": "./index.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "skill",
+    "cordis.patch.yml",
+    "README.md",
+    "docs",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "license": "MIT",
+  "scripts": {
+    "verify": "node scripts/verify.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "^0.2.2-rc.2"
+  }
+}
