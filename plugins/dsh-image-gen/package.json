@@ -1,8 +1,8 @@
 {
   "name": "dsh-image-gen",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
-  "description": "GPT（TeamoRouter）与 MiniMax H3-Image 生图/改图工具：一个工具切换后端，模型、档位与价格快照内建。",
+  "description": "GPT（TeamoRouter）与 MiniMax H3-Image 生图/改图工具：一个工具切换后端，GPT 档位（1K/2K/4K）与人民币价格快照内建。",
   "type": "module",
   "icon": "icon.svg",
   "main": "index.js",

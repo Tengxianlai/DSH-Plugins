@@ -22,9 +22,11 @@ import {
   MODEL_IDS,
   PROVIDERS,
   QUALITIES,
+  billingTierOfSize,
   catalogText,
+  costCnyFor,
   normalizeFormat,
-  planSize,
+  planBilledSize,
   resolveSelection,
   validateCounts,
   validatePrompt,
@@ -239,7 +241,7 @@ export function apply(ctx, config) {
   ctx.tools.register(defineTool({
     name: 'image_models',
     description:
-      'List image providers, models, resolution tiers, capabilities, and the price snapshot used by image_generate. Call it when choosing a provider/model or when cost matters.',
+      'List image providers, models, billing tiers, capabilities and the CNY price snapshot used by image_generate. Read the GPT tier table before choosing `size`; call it whenever cost matters.',
     parameters: {},
     output: {
       schema: {
@@ -259,7 +261,15 @@ export function apply(ctx, config) {
   ctx.tools.register(defineTool({
     name: 'image_generate',
     description:
-      'Generate or edit images with GPT Image (TeamoRouter) or MiniMax H3-Image. Without `images` it draws from the prompt; with `images` (local paths or URLs, up to 16) it edits or combines them, and passing the same reference each time keeps a subject consistent. MiniMax offers a ~16.8MP 4K area at low cost. Saves files and returns their paths; does not put image bytes in the conversation. Call image_models for capabilities and prices.',
+      'Generate or edit images with GPT Image (TeamoRouter) or MiniMax H3-Image. ' +
+      '`size` is the BILLING TIER, not a marketing label: 1k/2k/4k (GPT default 2k). ' +
+      'GPT bills the delivered image by its longest side: 1K and 2K both cost about ¥0.18/image, ' +
+      '4K costs about ¥0.60 (~3.3x). 2K means longest side 2048 — 2048x1152 for 16:9; ' +
+      '2560x1440 is billed as 4K, so never pass it for 2K. Prefer size:"2k" + aspect over ' +
+      'computing pixels. Without `images` it draws from the prompt; with `images` (local paths ' +
+      'or URLs, up to 16) it edits or combines them, and passing the same reference each time ' +
+      'keeps a subject consistent. MiniMax is the cheaper 4K path. Saves files, returns their ' +
+      'paths and an estimated CNY cost; call image_models for the full table.',
     timeoutMs: 900_000,
     parameters: {
       prompt: {
@@ -277,7 +287,9 @@ export function apply(ctx, config) {
         type: 'string',
         enum: MODEL_IDS,
         description:
-          'Exact model id. Defaults: gpt-image-2.6-sunburst (gpt), MiniMax-H3-Image (minimax). GPT *-4k-upscale variants add 4K detail; MiniMax-H3-Image-Highspeed is faster at about 1.5-2x the standard price. See image_models.',
+          'Exact model id. Defaults: gpt-image-2.6-sunburst (gpt), MiniMax-H3-Image (minimax). ' +
+          'Never pick a *-4k-upscale model for 2K: it is 4K-only and always bills 4K. ' +
+          'MiniMax-H3-Image-Highspeed is faster at about 1.5-2x the standard price. See image_models.',
       },
       images: {
         type: 'array',
@@ -288,18 +300,30 @@ export function apply(ctx, config) {
       size: {
         type: 'string',
         description:
-          'Resolution tier or explicit WIDTHxHEIGHT. Default 1k. gpt: 1k/2k/4k map to longest side 1024/2048/3840; explicit sizes need multiples of 16, longest <=3840, total 655,360-8,294,400px. minimax: 1k/2k/4k are area tiers (4K = 4096^2); explicit sizes need 655,360-20,000,000px and aspect 1:3-3:1. MiniMax 4K has about 2x GPT 4K pixels.',
+          'Billing tier: "1k", "2k", or "4k". Defaults: gpt 2k (1K and 2K cost the same, ~¥0.18), ' +
+          'minimax 1k. GPT bills by delivered longest side: <=1024 1K, <=2048 2K, >2048 4K (~¥0.60). ' +
+          'For 16:9 2K pass size:"2k" + aspect:"16:9" (2048x1152); do NOT compute pixels — ' +
+          '2560x1440 is 4K billing. Explicit WIDTHxHEIGHT (multiples of 16, longest <=3840, ' +
+          '0.66-8.29MP) is for exact control; an explicit per-image GPT size above 2048 requires allow_4k:true. ' +
+          'MiniMax: area 1K/2K/4K (1024^2/2048^2/4096^2) + aspect 1:3-3:1, or explicit 0.66-20MP.',
       },
       aspect: {
         type: 'string',
         enum: ASPECTS,
         description: 'Shape for tier sizes; ignored with explicit WIDTHxHEIGHT. Default 1:1.',
       },
+      allow_4k: {
+        type: 'boolean',
+        description:
+          'per-image gpt models only, default false. An explicit WIDTHxHEIGHT whose longest side exceeds 2048 is ' +
+          'billed as 4K (~¥0.60) and is refused unless this is true. Not needed for size:"4k" ' +
+          'or for MiniMax. Set it only when you deliberately want exact 4K pixels.',
+      },
       quality: {
         type: 'string',
         enum: QUALITIES,
         description:
-          'gpt only: auto (default), low, medium, high; higher costs more. minimax has no quality level and accepts only auto.',
+          'gpt only: auto (default), low, medium, high; this does not change the size/billing tier. minimax has no quality level and accepts only auto.',
       },
       n: {
         type: 'integer',
@@ -331,6 +355,7 @@ export function apply(ctx, config) {
           model: { type: 'string', required: true },
           format: { type: 'string' },
           billing_tier: { type: 'string' },
+          cost_cny: { type: 'number' },
           quality: { type: 'string' },
           revised_prompt: { type: 'string' },
           failed: {
@@ -340,10 +365,13 @@ export function apply(ctx, config) {
         },
       },
       render: (_args, value) => {
-        const billed =
+        const tier =
           value.billing_tier === undefined
             ? ''
-            : ` (${value.provider === 'minimax' ? 'area' : 'billed as'} ${value.billing_tier})`
+            : `${value.provider === 'minimax' ? 'area' : 'billed as'} ${value.billing_tier}`
+        const cost = value.cost_cny === undefined ? '' : `≈¥${value.cost_cny.toFixed(2)}`
+        const detail = [tier, cost].filter((part) => part.length > 0).join(', ')
+        const billed = detail.length === 0 ? '' : ` (${detail})`
         const failed =
           value.failed === undefined || value.failed.length === 0
             ? ''
@@ -377,7 +405,13 @@ export function apply(ctx, config) {
       const images = args.images ?? []
       validateCounts(provider, n, images.length)
       const format = args.format ?? 'png'
-      const sizePlan = planSize(provider, args.size, args.aspect ?? '1:1')
+      const sizePlan = planBilledSize({
+        provider,
+        entry,
+        size: args.size,
+        aspect: args.aspect ?? '1:1',
+        allow4k: args.allow_4k === true,
+      })
       const plan = { provider, model, n, format, quality, ...sizePlan }
 
       const key = await resolveKey(ctx, backend)
@@ -439,6 +473,7 @@ export function apply(ctx, config) {
       const files = []
       const failures = []
       const actualFormats = []
+      const billedTiers = []
       let actualSize
       let revisedPrompt
 
@@ -469,7 +504,15 @@ export function apply(ctx, config) {
         writeFileSync(file, bytes)
         files.push(file)
         actualFormats.push(actualFormat)
-        if (actualSize === undefined && typeof item.size === 'string') actualSize = item.size
+        const deliveredSize = typeof item.size === 'string' ? item.size : undefined
+        if (actualSize === undefined && deliveredSize !== undefined) actualSize = deliveredSize
+        // GPT per-image models bill by the delivered longest side; MiniMax's
+        // tier is the requested area, which its own size cannot express.
+        billedTiers.push(
+          provider === 'gpt' && entry.pricing.mode === 'per_image'
+            ? (billingTierOfSize(deliveredSize) ?? plan.billingTier)
+            : plan.billingTier,
+        )
         if (revisedPrompt === undefined && typeof item.revised_prompt === 'string') {
           revisedPrompt = item.revised_prompt
         }
@@ -482,7 +525,12 @@ export function apply(ctx, config) {
       // Gemini image models are token-billed, so their size tier is not a
       // billing tier; only report it for per-image GPT models and MiniMax areas.
       const billingTier =
-        provider === 'gpt' && entry.pricing.mode === 'token' ? undefined : plan.billingTier
+        provider === 'gpt' && entry.pricing.mode === 'token' ? undefined : billedTiers[0]
+      const unitCosts = billedTiers.map((tier) => costCnyFor(entry, tier))
+      const costCny =
+        unitCosts.length > 0 && unitCosts.every((value) => value !== undefined)
+          ? Number(unitCosts.reduce((sum, value) => sum + value, 0).toFixed(2))
+          : undefined
 
       return {
         files,
@@ -491,6 +539,7 @@ export function apply(ctx, config) {
         model,
         format: actualFormats[0],
         ...(billingTier === undefined ? {} : { billing_tier: billingTier }),
+        ...(costCny === undefined ? {} : { cost_cny: costCny }),
         ...(quality === undefined ? {} : { quality }),
         ...(revisedPrompt === undefined ? {} : { revised_prompt: revisedPrompt }),
         ...(failures.length === 0 ? {} : { failed: failures }),
