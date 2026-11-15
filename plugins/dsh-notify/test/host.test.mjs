@@ -13,12 +13,26 @@ import {
   describeQuestion,
   describeTurnEnd,
   formatDuration,
+  isMuted,
   normalizeConfig,
   sessionTitle,
+  soundRoute,
   start,
   truncate,
 } from '../index.js'
-import { createNotifier, notificationArgs, resolveSound } from '../notifier.js'
+import {
+  WSL_SOUNDS,
+  createNotifier,
+  detectWsl,
+  encodePowerShell,
+  notificationArgs,
+  powershellArgs,
+  resolveSound,
+  resolveWindowsPowerShell,
+  windowsSoundPath,
+  windowsSoundScript,
+  windowsToastScript,
+} from '../notifier.js'
 
 let failed = 0
 let passed = 0
@@ -120,13 +134,13 @@ const subagentSession = () => ({ header: { cwd: '/Users/someone/Projects/demo', 
 /**
  * 装配一套「插件 + 假 ctx + 假 sink」。
  * @param {object} [overrides] - 配置覆盖项。
- * @param {object} [options] - `title` 控制会话标题服务。
+ * @param {object} [options] - `title` 控制会话标题服务，`platform` 控制声音路由。
  */
 function boot(overrides = {}, options = {}) {
   const ctx = createCtx(options)
   const sink = createSink()
   const config = normalizeConfig({ ...DEFAULTS, ...overrides })
-  const api = start(ctx, config, sink)
+  const api = start(ctx, config, sink, { platform: options.platform ?? 'linux' })
   return { ctx, sink, config, api }
 }
 
@@ -143,6 +157,7 @@ test('配置默认值与非法值回落到默认', () => {
     minTurnSeconds: 0,
     includeSubagents: true,
     dedupeSeconds: 1,
+    soundChannel: 'page',
   })
   assert.equal(custom.turnEnd, false)
   assert.deepEqual(custom.sounds, {
@@ -154,11 +169,37 @@ test('配置默认值与非法值回落到默认', () => {
   assert.equal(custom.minTurnSeconds, 0)
   assert.equal(custom.includeSubagents, true)
   assert.equal(custom.dedupeSeconds, 1)
-  const broken = normalizeConfig({ approval: 'yes', sound: '', minTurnSeconds: -3, dedupeSeconds: Number.NaN })
+  assert.equal(custom.soundChannel, 'page')
+  const broken = normalizeConfig({
+    approval: 'yes',
+    sound: '',
+    minTurnSeconds: -3,
+    dedupeSeconds: Number.NaN,
+    soundChannel: 'speaker',
+  })
   assert.equal(broken.approval, DEFAULTS.approval)
   assert.deepEqual(broken.sounds, DEFAULT_SOUNDS)
   assert.equal(broken.minTurnSeconds, DEFAULTS.minTurnSeconds)
   assert.equal(broken.dedupeSeconds, DEFAULTS.dedupeSeconds)
+  assert.equal(broken.soundChannel, 'auto')
+})
+
+test('声音路由：页面优先，macOS + auto 保留宿主原生提示音', () => {
+  const auto = { soundChannel: 'auto', pageConnected: true }
+  assert.equal(soundRoute({ ...auto, platform: 'linux' }), 'page')
+  assert.equal(soundRoute({ ...auto, platform: 'darwin' }), 'host')
+  assert.equal(soundRoute({ ...auto, platform: 'linux', pageConnected: false }), 'host')
+  assert.equal(soundRoute({ soundChannel: 'page', pageConnected: true, platform: 'darwin' }), 'page')
+  assert.equal(soundRoute({ soundChannel: 'page', pageConnected: false, platform: 'linux' }), 'host')
+  assert.equal(soundRoute({ soundChannel: 'host', pageConnected: true, platform: 'linux' }), 'host')
+})
+
+test('静音判定认 none 与空串', () => {
+  assert.equal(isMuted('none'), true)
+  assert.equal(isMuted(''), true)
+  assert.equal(isMuted(undefined), true)
+  assert.equal(isMuted('Glass'), false)
+  assert.equal(isMuted('/tmp/ding.wav'), false)
 })
 
 test('时长格式化', () => {
@@ -378,6 +419,113 @@ test('macOS 上先发通知再放提示音；none 时只发通知', () => {
   assert.equal(spawned.length, 1)
 })
 
+/** 解开 `-EncodedCommand` 的 base64（UTF-16LE），断言用的是 PowerShell 自己的转义。 */
+const decodePowerShell = (args) => {
+  assert.equal(args.at(-2), '-EncodedCommand')
+  return Buffer.from(args.at(-1), 'base64').toString('utf16le')
+}
+
+test('WSL 探测：环境变量、/proc/version、非 linux 都不误判', () => {
+  assert.equal(detectWsl({ platform: 'linux', env: { WSL_DISTRO_NAME: 'Ubuntu' } }), true)
+  assert.equal(
+    detectWsl({ platform: 'linux', env: {}, readFile: () => 'Linux version 5.15 microsoft-standard-WSL2' }),
+    true,
+  )
+  assert.equal(detectWsl({ platform: 'linux', env: {}, readFile: () => 'Linux version 6.1.0 arch' }), false)
+  assert.equal(detectWsl({ platform: 'darwin', env: { WSL_DISTRO_NAME: 'Ubuntu' } }), false)
+  assert.equal(
+    detectWsl({
+      platform: 'linux',
+      env: {},
+      readFile: () => {
+        throw new Error('ENOENT')
+      },
+    }),
+    false,
+  )
+})
+
+test('WSL 提示音按类别映射到 Windows 系统 wav，静音与自定义路径不硬映射', () => {
+  assert.equal(windowsSoundPath('Glass', 'turn'), 'C:\\Windows\\Media\\chimes.wav')
+  assert.equal(windowsSoundPath('Basso', 'error'), 'C:\\Windows\\Media\\Windows Critical Stop.wav')
+  assert.equal(windowsSoundPath('Submarine', 'approval'), 'C:\\Windows\\Media\\Windows Ding.wav')
+  assert.equal(windowsSoundPath('Ping', 'question'), 'C:\\Windows\\Media\\Windows Balloon.wav')
+  assert.equal(windowsSoundPath('Glass', '没见过的类别'), 'C:\\Windows\\Media\\chimes.wav')
+  assert.equal(windowsSoundPath('none', 'turn'), undefined)
+  assert.equal(windowsSoundPath('', 'turn'), undefined)
+  assert.equal(windowsSoundPath('/tmp/ding.wav', 'turn'), undefined)
+  assert.equal(Object.keys(WSL_SOUNDS).length, 4)
+})
+
+test('PowerShell 脚本：编码可还原，标题/正文不进脚本文本', () => {
+  assert.equal(Buffer.from(encodePowerShell('Write-Output 1'), 'base64').toString('utf16le'), 'Write-Output 1')
+  const title = `本轮 "完成" 'x' $env:PATH`
+  const body = '正文\n换行 & 符号'
+  const script = windowsToastScript(title, body)
+  assert.ok(script.includes('ToastNotificationManager'))
+  assert.ok(script.includes(Buffer.from(title, 'utf8').toString('base64')))
+  assert.ok(!script.includes('本轮'), '标题不应该以明文进脚本')
+  const sound = decodePowerShell(powershellArgs(windowsSoundScript(windowsSoundPath('Glass', 'error'))))
+  assert.ok(sound.includes('Windows Critical Stop.wav'))
+  assert.ok(sound.includes('PlaySync'))
+})
+
+test('WSL 宿主：放音与 Toast 都经 powershell.exe，互操作参数正确', () => {
+  const spawned = []
+  const spawn = (command, args) => {
+    spawned.push({ command, args })
+    return { on() {}, unref() {} }
+  }
+  const notifier = createNotifier({
+    platform: 'linux',
+    wsl: true,
+    powershell: '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',
+    spawn,
+  })
+  assert.equal(notifier.wsl, true)
+
+  notifier.play('Glass', 'error')
+  assert.equal(spawned.length, 1)
+  assert.equal(spawned[0].command, '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe')
+  assert.ok(decodePowerShell(spawned[0].args).includes('Windows Critical Stop.wav'))
+
+  spawned.length = 0
+  notifier.post({ title: '需要审批 · demo', body: 'bash 等待你的决定' })
+  assert.equal(spawned.length, 1)
+  assert.ok(decodePowerShell(spawned[0].args).includes('ToastNotificationManager'))
+
+  spawned.length = 0
+  notifier.play('none', 'turn')
+  assert.equal(spawned.length, 0, 'none 不启动进程')
+})
+
+test('WSL 自定义绝对路径只 warn 一次（请把声音交给页面）', () => {
+  const warnings = []
+  const spawned = []
+  const notifier = createNotifier({
+    platform: 'linux',
+    wsl: true,
+    powershell: 'powershell.exe',
+    spawn: (command, args) => {
+      spawned.push({ command, args })
+      return { on() {}, unref() {} }
+    },
+    logger: { warn: (format, message) => warnings.push(message) },
+  })
+  notifier.play('/tmp/ding.wav', 'turn')
+  notifier.play('/tmp/ding.wav', 'turn')
+  assert.equal(spawned.length, 0)
+  assert.equal(warnings.length, 1)
+})
+
+test('powershell.exe 优先走已挂载的绝对路径，找不到再交给 PATH', () => {
+  assert.equal(
+    resolveWindowsPowerShell({ exists: () => true }),
+    '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',
+  )
+  assert.equal(resolveWindowsPowerShell({ exists: () => false }), 'powershell.exe')
+})
+
 test('不支持的系统 / 启动失败只 warn 一次，不抛错', () => {
   const warnings = []
   const logger = { warn: (format, message) => warnings.push(message) }
@@ -463,8 +611,8 @@ test('插件入口不把返回值交给 Cordis（普通对象会被当成非法 
   assert.equal(ctx.cleanups.length, 1)
 })
 
-test('浏览器半体连着时：横幅走页面，宿主不再发系统通知', () => {
-  const { ctx, sink, api } = boot({ minTurnSeconds: 0 })
+test('浏览器半体连着时：横幅走页面，声音也交给页面（Linux 宿主）', () => {
+  const { ctx, sink, api } = boot({ minTurnSeconds: 0 }, { platform: 'linux' })
   assert.equal(ctx.routes.length, 1)
   assert.equal(ctx.routes[0].path, EVENTS_PATH)
   assert.equal(ctx.routes[0].kind, 'exact')
@@ -486,8 +634,8 @@ test('浏览器半体连着时：横幅走页面，宿主不再发系统通知',
   atTime(0, () => emit(ctx, 'session/event', session, { type: 'turn/start', data: { turn: 1 } }))
   atTime(30_000, () => emit(ctx, 'session/event', session, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } }))
 
-  // 声音仍在宿主侧；横幅变成一条 SSE 帧，宿主没发 osascript。
-  assert.deepEqual(sink.sounds, [DEFAULT_SOUNDS.turn])
+  // 宿主不发声也不发系统通知；横幅帧里带 sound，页面自己放。
+  assert.deepEqual(sink.sounds, [])
   assert.equal(sink.calls.length, 0)
   const frame = written.at(-1)
   assert.ok(frame.startsWith('data: '))
@@ -495,14 +643,57 @@ test('浏览器半体连着时：横幅走页面，宿主不再发系统通知',
   assert.equal(payload.title, '本轮完成 · demo')
   assert.equal(payload.body, '用时 30 秒')
   assert.equal(payload.kind, 'turn')
+  assert.equal(payload.sound, 'turn')
 
-  // 页面关掉：回到宿主系统通知。
+  // 页面关掉：声音和横幅都回到宿主。
   for (const close of closes) close()
   assert.equal(api.clients.size, 0)
   atTime(60_000, () => emit(ctx, 'session/event', session, { type: 'turn/start', data: { turn: 2 } }))
   atTime(90_000, () => emit(ctx, 'session/event', session, { type: 'turn/end', data: { turn: 2, reason: { kind: 'completed' } } }))
+  assert.equal(sink.sounds.length, 1)
   assert.equal(sink.calls.length, 1)
   assert.equal(sink.calls[0].title, '本轮完成 · demo')
+})
+
+test('macOS 宿主 + auto：页面连着时仍由宿主放原生提示音', () => {
+  const { ctx, sink } = boot({ minTurnSeconds: 0 }, { platform: 'darwin' })
+  const written = []
+  ctx.routes[0].handler(
+    { method: 'GET' },
+    { writeHead() {}, write(chunk) { written.push(chunk) }, on() {}, end() {} },
+  )
+  const session = rootSession()
+  atTime(0, () => emit(ctx, 'session/event', session, { type: 'turn/start', data: { turn: 1 } }))
+  atTime(30_000, () => emit(ctx, 'session/event', session, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } }))
+  assert.deepEqual(sink.sounds, [DEFAULT_SOUNDS.turn])
+  assert.equal(sink.calls.length, 0, '有页面时横幅仍走页面')
+  const payload = JSON.parse(written.at(-1).slice('data: '.length))
+  assert.equal(payload.sound, undefined, '宿主已经发声，页面不要重复响')
+})
+
+test('soundChannel: host 强制宿主发声；sound: none 时页面也不响', () => {
+  const host = boot({ minTurnSeconds: 0, soundChannel: 'host' }, { platform: 'linux' })
+  const written = []
+  host.ctx.routes[0].handler(
+    { method: 'GET' },
+    { writeHead() {}, write(chunk) { written.push(chunk) }, on() {}, end() {} },
+  )
+  const session = rootSession()
+  atTime(0, () => emit(host.ctx, 'session/event', session, { type: 'turn/start', data: { turn: 1 } }))
+  atTime(30_000, () => emit(host.ctx, 'session/event', session, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } }))
+  assert.deepEqual(host.sink.sounds, [DEFAULT_SOUNDS.turn])
+  assert.equal(JSON.parse(written.at(-1).slice('data: '.length)).sound, undefined)
+
+  const muted = boot({ minTurnSeconds: 0, sound: 'none' }, { platform: 'linux' })
+  const mutedFrames = []
+  muted.ctx.routes[0].handler(
+    { method: 'GET' },
+    { writeHead() {}, write(chunk) { mutedFrames.push(chunk) }, on() {}, end() {} },
+  )
+  atTime(0, () => emit(muted.ctx, 'session/event', session, { type: 'turn/start', data: { turn: 1 } }))
+  atTime(30_000, () => emit(muted.ctx, 'session/event', session, { type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } }))
+  assert.deepEqual(muted.sink.sounds, [])
+  assert.equal(JSON.parse(mutedFrames.at(-1).slice('data: '.length)).sound, undefined)
 })
 
 test('SSE 路由只接受 GET；卸载时路由与连接一起收掉', () => {

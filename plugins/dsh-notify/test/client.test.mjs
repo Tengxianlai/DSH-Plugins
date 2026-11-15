@@ -1,6 +1,7 @@
 /**
- * dsh-notify 浏览器半体自测：用假的 window / EventSource / Notification 载入 client.js，
- * 确认它订阅了宿主的 SSE 端点、把帧变成系统通知、点击时聚焦窗口。
+ * dsh-notify 浏览器半体自测：用假的 window / EventSource / Notification / AudioContext
+ * 载入 client.js，确认它订阅了宿主的 SSE 端点、把帧变成系统通知、按帧里的 `sound`
+ * 合成提示音，并在首次手势里解锁音频与通知权限。
  *
  * 跑法：node test/client.test.mjs（仓根 `npm run verify` 会带上）
  */
@@ -32,11 +33,19 @@ const test = (name, run) => {
 const notifications = []
 /** 记录 EventSource 实例。 */
 const sources = []
+/** 记录 window 上挂过的手势监听器。 */
+const windowListeners = new Map()
 /** 被聚焦的次数。 */
 let focused = 0
 
 class FakeNotification {
   static permission = 'granted'
+  static requested = 0
+
+  static requestPermission() {
+    FakeNotification.requested += 1
+    return Promise.resolve('default')
+  }
 
   constructor(title, options) {
     this.title = title
@@ -80,10 +89,75 @@ class FakeEventSource {
   }
 }
 
+/** 记下每一次排进时间线的振荡器，供断言「响了几声」。 */
+const oscillators = []
+
+class FakeAudioContext {
+  /** 新建上下文时的初始状态；自测里改成 `'suspended'` 模拟没有用户手势。 */
+  static initialState = 'running'
+
+  /** `'running'`：resume 成功；`'suspended'`：resume 后仍然没跑起来（浏览器拦了）。 */
+  static resumeBehavior = 'running'
+
+  static instances = []
+
+  constructor() {
+    this.state = FakeAudioContext.initialState
+    this.currentTime = 0
+    this.resumes = 0
+    FakeAudioContext.instances.push(this)
+  }
+
+  get destination() {
+    return { name: 'destination' }
+  }
+
+  resume() {
+    this.resumes += 1
+    if (FakeAudioContext.resumeBehavior === 'running') this.state = 'running'
+    return Promise.resolve()
+  }
+
+  createOscillator() {
+    const oscillator = {
+      type: 'sine',
+      frequency: {
+        setValueAtTime() {},
+        exponentialRampToValueAtTime() {},
+      },
+      connect() {},
+      start() {},
+      stop() {},
+    }
+    oscillators.push(oscillator)
+    return oscillator
+  }
+
+  createGain() {
+    return {
+      gain: {
+        setValueAtTime() {},
+        exponentialRampToValueAtTime() {},
+      },
+      connect() {},
+    }
+  }
+}
+
 let envelope
 globalThis.window = {
   focus() {
     focused += 1
+  },
+  addEventListener(type, handler) {
+    const list = windowListeners.get(type) ?? []
+    list.push(handler)
+    windowListeners.set(type, list)
+  },
+  removeEventListener(type, handler) {
+    const list = windowListeners.get(type) ?? []
+    const index = list.indexOf(handler)
+    if (index >= 0) list.splice(index, 1)
   },
   __ModuleLoader__: {
     load(definition) {
@@ -93,22 +167,27 @@ globalThis.window = {
 }
 globalThis.Notification = FakeNotification
 globalThis.EventSource = FakeEventSource
+globalThis.AudioContext = FakeAudioContext
 
 await import(pathToFileURL(new URL('../client.js', import.meta.url).pathname).href)
 
 console.log('dsh-notify · client')
 
-test('模块信封：id 与宿主 SSE 端点一致', () => {
-  assert.ok(envelope !== undefined, 'client.js 没有调用 __ModuleLoader__.load')
-  assert.equal(envelope.id, 'dsh-notify')
-  const plugin = envelope.factory(() => {
-    throw new Error('客户端半边不应该 require 任何模块')
-  })
-  assert.equal(plugin.name, 'notify')
-  assert.equal(plugin.EVENTS_PATH, HOST_EVENTS_PATH)
-})
+/** 每次用例前清空通知、振荡器与窗口监听器。 */
+const reset = () => {
+  notifications.length = 0
+  oscillators.length = 0
+  focused = 0
+  windowListeners.clear()
+  FakeNotification.permission = 'granted'
+  FakeNotification.requested = 0
+  FakeAudioContext.instances.length = 0
+  FakeAudioContext.initialState = 'running'
+  FakeAudioContext.resumeBehavior = 'running'
+}
 
-test('apply 订阅宿主横幅流，卸载时关掉连接', () => {
+/** 装配一个客户端插件实例，返回它和清理函数。 */
+const mount = () => {
   const plugin = envelope.factory(() => {})
   const cleanups = []
   plugin.apply({
@@ -116,52 +195,125 @@ test('apply 订阅宿主横幅流，卸载时关掉连接', () => {
       cleanups.push(factory())
     },
   })
+  return { plugin, cleanups }
+}
+
+test('模块信封：id 与宿主 SSE 端点一致，四类提示音齐全', () => {
+  assert.ok(envelope !== undefined, 'client.js 没有调用 __ModuleLoader__.load')
+  assert.equal(envelope.id, 'dsh-notify')
+  const plugin = envelope.factory(() => {
+    throw new Error('客户端半边不应该 require 任何模块')
+  })
+  assert.equal(plugin.name, 'notify')
+  assert.equal(plugin.EVENTS_PATH, HOST_EVENTS_PATH)
+  assert.deepEqual(Object.keys(plugin.CUES).sort(), ['approval', 'error', 'question', 'turn'])
+  for (const cue of Object.values(plugin.CUES)) {
+    assert.ok(Array.isArray(cue) && cue.length > 0)
+    for (const note of cue) assert.ok(Number.isFinite(note.freq))
+  }
+})
+
+test('apply 订阅横幅流并挂手势监听，卸载时全部收掉', () => {
+  reset()
+  const { cleanups } = mount()
   assert.equal(sources.length, 1)
   assert.equal(sources[0].url, HOST_EVENTS_PATH)
-  assert.equal(cleanups.length, 1)
-  cleanups[0]()
+  assert.equal(cleanups.length, 2, '一条 SSE + 一条手势监听')
+  assert.deepEqual([...windowListeners.keys()].sort(), ['keydown', 'pointerdown'])
+
+  for (const cleanup of cleanups) cleanup()
   assert.equal(sources[0].closed, true)
+  assert.equal([...windowListeners.values()].flat().length, 0)
 })
 
 test('收到帧就弹通知：正文来自宿主，静音、可点击聚焦', () => {
-  notifications.length = 0
-  focused = 0
-  const plugin = envelope.factory(() => {})
-  plugin.apply({ effect(factory) { factory() } })
-  const source = sources.at(-1)
-  source.dispatch('message', { data: JSON.stringify({ title: '需要审批 · demo', body: 'bash 等待你的决定', kind: 'approval' }) })
+  reset()
+  const { plugin } = mount()
+  plugin.handle({ title: '需要审批 · demo', body: 'bash 等待你的决定', kind: 'approval' })
 
   assert.equal(notifications.length, 1)
   const notification = notifications[0]
   assert.equal(notification.title, '需要审批 · demo')
   assert.equal(notification.options.body, 'bash 等待你的决定')
-  assert.equal(notification.options.silent, true)
+  assert.equal(notification.options.silent, true, '没有 sound 字段时仍静音')
   notification.onclick()
   assert.equal(focused, 1)
   assert.equal(notification.closed, true)
 })
 
-test('坏帧与缺标题的帧被丢弃', () => {
-  notifications.length = 0
-  const plugin = envelope.factory(() => {})
-  plugin.apply({ effect(factory) { factory() } })
-  const source = sources.at(-1)
-  source.dispatch('message', { data: 'not json' })
-  source.dispatch('message', { data: JSON.stringify({ body: '没有标题' }) })
-  assert.equal(notifications.length, 0)
+test('带 sound 的帧会合成提示音，并让系统通知闭嘴', () => {
+  reset()
+  const { plugin } = mount()
+  plugin.handle({ title: '本轮完成 · demo', body: '用时 30 秒', kind: 'turn', sound: 'turn' })
+
+  assert.ok(oscillators.length >= 2, 'turn 有两声')
+  assert.equal(notifications.length, 1)
+  assert.equal(notifications[0].options.silent, true, '页面已经响过，别再响一声')
 })
 
-test('通知权限被明确拒绝时不弹（声音仍由宿主负责）', () => {
-  notifications.length = 0
-  FakeNotification.permission = 'denied'
+test('音频没解锁时不排队，改让系统通知自己响一声', () => {
+  reset()
+  FakeAudioContext.initialState = 'suspended'
+  FakeAudioContext.resumeBehavior = 'stay-suspended'
+  const { plugin } = mount()
+  plugin.handle({ title: '本轮出错 · demo', body: '出错：provider 500', kind: 'error', sound: 'error' })
+
+  assert.equal(oscillators.length, 0)
+  assert.equal(FakeAudioContext.instances.length, 1)
+  assert.equal(FakeAudioContext.instances[0].resumes, 1)
+  assert.equal(notifications[0].options.silent, false, '页面放不出声，退回系统提示音')
+})
+
+test('未知类别或浏览器不支持 Web Audio 时安静返回 false', () => {
+  reset()
+  const { plugin } = mount()
+  assert.equal(plugin.playCue('没见过的类别'), false)
+  const saved = globalThis.AudioContext
   try {
-    const plugin = envelope.factory(() => {})
-    plugin.apply({ effect(factory) { factory() } })
-    sources.at(-1).dispatch('message', { data: JSON.stringify({ title: '本轮完成 · demo', body: '用时 8 秒' }) })
-    assert.equal(notifications.length, 0)
+    delete globalThis.AudioContext
+    assert.equal(plugin.playCue('turn'), false)
   } finally {
-    FakeNotification.permission = 'granted'
+    globalThis.AudioContext = saved
   }
+  assert.equal(oscillators.length, 0)
+})
+
+test('首次手势解锁音频并申请通知权限（只申请一次）', () => {
+  reset()
+  FakeNotification.permission = 'default'
+  // 没有手势前浏览器把 AudioContext 挂在 suspended，手势里必须 resume 一次。
+  FakeAudioContext.initialState = 'suspended'
+  mount()
+  const gesture = windowListeners.get('pointerdown')[0]
+  gesture()
+
+  assert.equal(FakeAudioContext.instances.length, 1)
+  assert.equal(FakeAudioContext.instances[0].state, 'running')
+  assert.equal(FakeAudioContext.instances[0].resumes, 1)
+  assert.equal(FakeNotification.requested, 1)
+
+  // 再点一次不重复申请权限。
+  gesture()
+  assert.equal(FakeNotification.requested, 1)
+})
+
+test('通知权限被明确拒绝时不弹（声音仍走页面）', () => {
+  reset()
+  FakeNotification.permission = 'denied'
+  const { plugin } = mount()
+  plugin.handle({ title: '本轮完成 · demo', body: '用时 8 秒', sound: 'turn' })
+  assert.equal(notifications.length, 0)
+  assert.ok(oscillators.length >= 2, '横幅没有，声音不能没有')
+})
+
+test('坏帧与缺标题的帧被丢弃', () => {
+  reset()
+  const { plugin } = mount()
+  assert.equal(plugin.parseFrame('not json'), undefined)
+  assert.equal(plugin.parseFrame('null'), undefined)
+  plugin.handle(plugin.parseFrame('not json'))
+  plugin.handle({ body: '没有标题' })
+  assert.equal(notifications.length, 0)
 })
 
 console.log(`\n${failed === 0 ? '通过' : '失败'}：${passed} 项通过，${failed} 项失败`)

@@ -12,8 +12,10 @@
  * `minTurnSeconds` 当代理——几秒钟就答完的回合不吵你，跑久了的才提醒。
  * 想看每一轮都响，把它设成 0。
  *
- * 通知走系统自带的 `osascript`/`afplay`（见 notifier.js），不依赖页面、
- * 不需要浏览器通知权限，窗口关掉也照样响。
+ * 声音走哪条通道由 `soundChannel` 决定（默认 `auto`）：页面连着时交给页面用
+ * Web Audio 发声——宿主所在的机器不一定是用户在看的机器（WSL 里的 DSH 没有
+ * 声卡，浏览器却在 Windows 上）；页面没连着时才退回宿主（见 notifier.js）。
+ * macOS 宿主例外：`auto` 保持宿主 `afplay` 的原生提示音，页面不重复发声。
  */
 
 import { basename } from 'node:path'
@@ -52,7 +54,17 @@ export const DEFAULTS = Object.freeze({
   includeSubagents: false,
   /** 同一会话内两次提醒的最小间隔（秒）；审批/提问不受限。 */
   dedupeSeconds: 5,
+  /**
+   * 提示音走哪条通道：
+   * `auto` 页面连着就由页面发声（macOS 宿主保留原生提示音，页面不重复）；
+   * `page` 页面连着就由页面发声（连 macOS 也一样）；
+   * `host` 永远由宿主发声，页面只弹横幅。
+   */
+  soundChannel: 'auto',
 })
+
+/** `soundChannel` 的合法取值；写错就回落到 `auto`。 */
+const SOUND_CHANNELS = new Set(['auto', 'page', 'host'])
 
 /** 四类时机的标题前缀。 */
 const LABELS = Object.freeze({
@@ -114,8 +126,39 @@ export function normalizeConfig(raw) {
     minTurnSeconds: seconds(source.minTurnSeconds, DEFAULTS.minTurnSeconds),
     includeSubagents: bool(source.includeSubagents, DEFAULTS.includeSubagents),
     dedupeSeconds: seconds(source.dedupeSeconds, DEFAULTS.dedupeSeconds),
+    soundChannel: SOUND_CHANNELS.has(source.soundChannel) ? source.soundChannel : DEFAULTS.soundChannel,
     sounds,
   }
+}
+
+/**
+ * 决定这一次提示音由谁放。
+ *
+ * 页面连着时优先页面：宿主可能跑在 WSL/服务器上，根本没有用户在听的声音
+ * 设备。例外是 `auto` + macOS——宿主能播系统原生提示音，比页面合成的更
+ * 好听，也保留了插件原来在 Mac 桌面端的实测行为。
+ *
+ * @param {object} options - 路由输入。
+ * @param {string} options.soundChannel - 配置的通道（`auto`/`page`/`host`）。
+ * @param {boolean} options.pageConnected - 是否有浏览器半体连着。
+ * @param {string} [options.platform] - 宿主平台；默认 `process.platform`。
+ * @returns {'page'|'host'} 谁来发声。
+ */
+export function soundRoute({ soundChannel, pageConnected, platform = process.platform }) {
+  if (!pageConnected) return 'host'
+  if (soundChannel === 'host') return 'host'
+  if (soundChannel === 'page') return 'page'
+  return platform === 'darwin' ? 'host' : 'page'
+}
+
+/**
+ * 提示音是否被配置成静音（`none` / 空串）。
+ *
+ * @param {unknown} sound - 配置里的提示音值。
+ * @returns {boolean} 静音时为 `true`。
+ */
+export function isMuted(sound) {
+  return typeof sound !== 'string' || sound === '' || sound === 'none'
 }
 
 /**
@@ -233,10 +276,12 @@ export function apply(ctx, rawConfig = {}) {
  *
  * @param {object} ctx - 宿主 Cordis 上下文（只用到 `on`/`effect`/`get`/`logger`）。
  * @param {object} config - {@link normalizeConfig} 的结果。
- * @param {{notify: Function}} notifier - 通知 sink。
+ * @param {{notify: Function, play?: Function, post?: Function}} notifier - 通知 sink。
+ * @param {object} [options] - 注入点。
+ * @param {string} [options.platform] - 宿主平台；默认 `process.platform`。
  * @returns {object} 采集到的 disposer 与内部状态，便于自测断言。
  */
-export function start(ctx, config, notifier) {
+export function start(ctx, config, notifier, { platform = process.platform } = {}) {
   const turnStartedAt = new Map()
   const lastNotifiedAt = new Map()
 
@@ -248,7 +293,7 @@ export function start(ctx, config, notifier) {
 
   /**
    * 往所有页面连接推一条横幅帧；写失败就当作该连接已死。
-   * @param {{title: string, body: string, kind: string}} payload - 横幅内容。
+   * @param {{title: string, body: string, kind: string, sound?: string}} payload - 横幅内容。
    */
   const publish = (payload) => {
     const line = `data: ${JSON.stringify(payload)}\n\n`
@@ -266,11 +311,20 @@ export function start(ctx, config, notifier) {
     const text = truncate(body, MAX_BODY)
     const sound = config.sounds?.[kind] ?? DEFAULT_SOUNDS[kind]
     try {
-      // 提示音永远由宿主放：页面拿不到 /System/Library/Sounds，且宿主放音
-      // 不受标签页节流影响。
-      notifier.play?.(sound)
-      if (clients.size > 0) publish({ title, body: text, kind })
-      else notifier.post?.({ title, body: text })
+      // 声音跟屏幕走：页面连着时由页面用 Web Audio 发声（宿主可能在 WSL 里，
+      // 没有声卡）；页面没连着才由宿主兜底。macOS + auto 保留宿主原生提示音。
+      const route = soundRoute({
+        soundChannel: config.soundChannel,
+        pageConnected: clients.size > 0,
+        platform,
+      })
+      if (route === 'host') notifier.play?.(sound, kind)
+      if (clients.size > 0) {
+        // 静音时不下发 `sound`，页面只弹横幅；否则页面按类别放对应的合成提示音。
+        publish({ title, body: text, kind, ...(route === 'page' && !isMuted(sound) ? { sound: kind } : {}) })
+      } else {
+        notifier.post?.({ title, body: text })
+      }
     } catch (error) {
       try {
         ctx?.logger?.warn?.('dsh-notify: %s', error?.message ?? String(error))

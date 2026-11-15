@@ -1,9 +1,9 @@
 {
   "name": "dsh-notify",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "会话等待审批、等待回答或本轮结束时发系统通知与提示音；横幅走页面（带 DSH 图标），提示音走宿主。",
+  "description": "会话等待审批、等待回答或本轮结束时发系统通知与提示音；横幅走页面（带 DSH 图标），提示音跟着屏幕走（页面 Web Audio，页面关掉时宿主兜底）。",
   "main": "index.js",
   "icon": "icon.svg",
   "exports": {
