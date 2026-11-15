@@ -1,0 +1,36 @@
+{
+  "name": "dsh-notify",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "会话等待审批、等待回答或本轮结束时发系统通知与提示音；横幅走页面（带 DSH 图标），提示音走宿主。",
+  "main": "index.js",
+  "icon": "icon.svg",
+  "exports": {
+    ".": {
+      "default": "./index.js"
+    },
+    "./package.json": "./package.json",
+    "./client": "./client.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "files": [
+    "index.js",
+    "notifier.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "icon.svg"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "license": "MIT"
+}
