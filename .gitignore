@@ -1,3 +1,7 @@
 node_modules/
 *.log
 .DS_Store
+
+# 插件默认输出目录（dsh-minimax-video / dsh-image-gen 生成的媒体），只是本机产物
+generated-videos/
+generated-images/
