@@ -438,7 +438,8 @@ function taskOutputSchema(extra = {}) {
       status: { type: 'string', required: true },
       model: { type: 'string' },
       resolution: { type: 'string' },
-      duration: { type: 'integer' },
+      // Regeneration may return measured media seconds, including fractional values.
+      duration: { type: 'number' },
       ratio: { type: 'string' },
       task_type: { type: 'string' },
       mode: { type: 'string' },
@@ -475,7 +476,8 @@ function prepareOutputSchema() {
       budget: { type: 'string' },
       model: { type: 'string' },
       resolution: { type: 'string' },
-      duration: { type: 'integer' },
+      // Regeneration may return measured media seconds, including fractional values.
+      duration: { type: 'number' },
       ratio: { type: 'string' },
       mode: { type: 'string' },
       requested_duration: { type: 'integer' },
@@ -489,6 +491,16 @@ function prepareOutputSchema() {
       note: { type: 'string' },
     },
   }
+}
+
+// Paid tools can return an offline plan (dry_run) or a submitted task.
+// Keep both result contracts strict instead of weakening task_id requirements.
+function paidOutputSchema() {
+  return { oneOf: [prepareOutputSchema(), taskOutputSchema()] }
+}
+
+function renderPaid(args, value) {
+  return value.status === 'prepared' ? renderPrepared(args, value) : renderTask(args, value)
 }
 
 function renderTask(_args, value) {
@@ -1536,6 +1548,12 @@ export function apply(ctx, config) {
   }
 
   async function executePaid({ args, exec, prep, submit }) {
+    // Native callers may serialize an unused optional plan selector as "".
+    // A real plan id remains mandatory to validate/claim when one is supplied.
+    if (typeof args.plan_id === 'string' && args.plan_id.trim().length === 0) {
+      args = { ...args }
+      delete args.plan_id
+    }
     if (args.dry_run === true && args.plan_id !== undefined) {
       throw new Error('use either dry_run or plan_id, not both')
     }
@@ -1662,11 +1680,13 @@ export function apply(ctx, config) {
     const record = intent
     const base = {
       task_id: taskId,
-      model: prep.plan?.model,
-      resolution: prep.plan?.resolution,
-      duration: prep.plan?.duration,
-      ratio: prep.plan?.ratio,
-      mode: prep.plan?.mode,
+      // Unknown optional metadata must be absent: an own undefined property
+      // fails the host's lossless-JSON snapshot after the task was submitted.
+      ...(prep.plan?.model === undefined ? {} : { model: prep.plan.model }),
+      ...(prep.plan?.resolution === undefined ? {} : { resolution: prep.plan.resolution }),
+      ...(prep.plan?.duration === undefined ? {} : { duration: prep.plan.duration }),
+      ...(prep.plan?.ratio === undefined ? {} : { ratio: prep.plan.ratio }),
+      ...(prep.plan?.mode === undefined ? {} : { mode: prep.plan.mode }),
       estimate: formatEstimate(prep.estimate),
       cost_status: prep.estimate.status,
       ...(prep.maxCost === undefined ? {} : { cost_cap: `${formatMoney(prep.maxCost, region)} ${currency} hard` }),
@@ -1729,11 +1749,11 @@ export function apply(ctx, config) {
     return {
       ...base,
       ...summaryOf(task, { task_id: taskId }),
-      model: prep.plan?.model,
-      resolution: prep.plan?.resolution,
-      duration: prep.plan?.duration,
-      ratio: prep.plan?.ratio,
-      mode: prep.plan?.mode,
+      ...(prep.plan?.model === undefined ? {} : { model: prep.plan.model }),
+      ...(prep.plan?.resolution === undefined ? {} : { resolution: prep.plan.resolution }),
+      ...(prep.plan?.duration === undefined ? {} : { duration: prep.plan.duration }),
+      ...(prep.plan?.ratio === undefined ? {} : { ratio: prep.plan.ratio }),
+      ...(prep.plan?.mode === undefined ? {} : { mode: prep.plan.mode }),
       estimate: formatEstimate(prep.estimate),
       cost_status: prep.estimate.status,
       ...(prep.maxCost === undefined ? {} : { cost_cap: `${formatMoney(prep.maxCost, region)} ${currency} hard` }),
@@ -1917,8 +1937,8 @@ export function apply(ctx, config) {
       },
     },
     output: {
-      schema: taskOutputSchema(),
-      render: renderTask,
+      schema: paidOutputSchema(),
+      render: renderPaid,
     },
     async execute(args, exec) {
       const cwd = await toolCwd(exec)
@@ -2121,8 +2141,8 @@ export function apply(ctx, config) {
       },
     },
     output: {
-      schema: taskOutputSchema(),
-      render: renderTask,
+      schema: paidOutputSchema(),
+      render: renderPaid,
     },
     async execute(args, exec) {
       const cwd = await toolCwd(exec)
@@ -2182,8 +2202,8 @@ export function apply(ctx, config) {
       wait_seconds: { type: 'integer', description: 'Maximum wait when wait is true. Default 900 s.' },
     },
     output: {
-      schema: taskOutputSchema(),
-      render: renderTask,
+      schema: paidOutputSchema(),
+      render: renderPaid,
     },
     async execute(args, exec) {
       const cwd = await toolCwd(exec)

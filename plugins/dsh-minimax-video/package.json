@@ -1,6 +1,6 @@
 {
   "name": "dsh-minimax-video",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "MiniMax H3 (Hailuo 3) 视频工具：四档模型、480P/768P/2K、首尾帧与多模态参考、768P→2K 再生成、提交前预检/算价、持久任务日志、跨调用预算，以及提示词/运镜/生产流程 skill。",
   "type": "module",

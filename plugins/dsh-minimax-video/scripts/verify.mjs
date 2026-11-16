@@ -16,9 +16,11 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
+import { createRequire } from 'node:module'
 import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
 import { apply, inject, name } from '../index.js'
 import {
   LIMITS,
@@ -64,6 +66,54 @@ import { PlanStore } from '../lib/plans.js'
 import { BudgetLedger } from '../lib/budget.js'
 import { acquireLock, atomicWriteJson, readJson, sha256Hex } from '../lib/store.js'
 
+// The host validates every successful execute() result before the model sees it
+// (dsh-tools pipeline.createSuccessResult): a lossless-JSON snapshot first,
+// then output.schema validation, a deep freeze, and finally output.render whose
+// content is snapshotted too. Mirror that exact boundary here instead of
+// accepting the raw execute() return. `@deepseek-ai/dsh-util-values` is not a
+// direct dependency of this repo, but the installed @deepseek-ai/dsh-tools pins
+// it as a real dependency, so resolve the runtime-identical copy from that
+// anchor (no new dependency, no install, no absolute install path).
+const hostRequire = createRequire(import.meta.url)
+const dshToolsEntry = hostRequire.resolve('@deepseek-ai/dsh-tools')
+const { snapshotJsonValue, deepFreeze } = await import(
+  pathToFileURL(createRequire(dshToolsEntry).resolve('@deepseek-ai/dsh-util-values')).href
+)
+
+/** Fail exactly where the host would reject a tool result: snapshot, schema, render. */
+function assertHostResult(definition, args, candidate) {
+  const detached = snapshotJsonValue(candidate)
+  assert.notEqual(
+    detached,
+    undefined,
+    `${definition.name}: the host would reject this result as non-lossless JSON (an own undefined/function/symbol/NaN value); a paid submit would lose its task id`,
+  )
+  const violations = validateJsonSchemaValue(definition.output.schema, detached, 'value')
+  assert.deepEqual(
+    violations,
+    [],
+    `${definition.name}: the host would reject this result against output.schema: ${JSON.stringify(violations)}`,
+  )
+  const value = deepFreeze(detached)
+  let rendered
+  try {
+    rendered = definition.output.render(args, value)
+  } catch (error) {
+    assert.fail(`${definition.name}: output.render threw: ${error.message}`)
+  }
+  const renderedSnapshot = snapshotJsonValue(rendered)
+  assert.notEqual(renderedSnapshot, undefined, `${definition.name}: output.render must return lossless JSON content`)
+  assert.ok(
+    Array.isArray(renderedSnapshot) && renderedSnapshot.length > 0,
+    `${definition.name}: output.render returned no content blocks`,
+  )
+  for (const block of renderedSnapshot) {
+    assert.equal(block.type, 'text', `${definition.name}: render blocks must be text`)
+    assert.equal(typeof block.text, 'string', `${definition.name}: render text must be a string`)
+  }
+  return value
+}
+
 const CLEANUP = []
 function tempDir(prefix) {
   const dir = mkdtempSync(join(tmpdir(), prefix))
@@ -75,10 +125,15 @@ function cleanup() {
 }
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02, 0x03])
-const MP4 = (() => {
+/**
+ * Build a minimal MP4 whose mvhd carries an exact duration: duration = seconds
+ * (or frames at fps via the `timescale` override, e.g. 328 frames at 24 fps is
+ * an exact 328000/24000 s container, not a rounded decimal).
+ */
+function mp4Buffer(seconds, timescale = 1000) {
   const mvhd = Buffer.alloc(100)
-  mvhd.writeUInt32BE(1000, 12)
-  mvhd.writeUInt32BE(5000, 16)
+  mvhd.writeUInt32BE(timescale, 12)
+  mvhd.writeUInt32BE(Math.round(seconds * timescale), 16)
   const mvhdBox = Buffer.alloc(8 + mvhd.length)
   mvhdBox.writeUInt32BE(8 + mvhd.length, 0)
   mvhdBox.write('mvhd', 4, 'ascii')
@@ -93,7 +148,8 @@ const MP4 = (() => {
   ftyp.write('isom', 8, 'ascii')
   ftyp.write('isomiso2', 16, 'ascii')
   return Buffer.concat([ftyp, moov, Buffer.alloc(1200)])
-})()
+}
+const MP4 = mp4Buffer(5)
 
 // --- registration -------------------------------------------------------
 assert.equal(name, 'minimax-video')
@@ -182,11 +238,61 @@ assert.deepEqual(enhance.parameters.required, ['prompt'])
 assert.deepEqual(budgetTool.parameters.properties.action.enum, ['status', 'create', 'amend', 'release'])
 assert.equal(models.parameters.required, undefined)
 
+// The paid tools can return either an offline plan (dry_run) or a submitted
+// task, so their output contract is a strict oneOf of both shapes. Neither
+// branch may relax its required identifiers or allow undeclared properties.
+const paidToolNames = ['video_generate', 'video_regenerate', 'video_prompt_enhance']
 for (const definition of definitions) {
-  assert.equal(definition.output.schema.type, 'object')
-  assert.ok(Array.isArray(definition.output.schema.required))
-  assert.ok(definition.output.schema.properties !== undefined)
+  const schema = definition.output.schema
+  if (paidToolNames.includes(definition.name)) {
+    assert.ok(Array.isArray(schema.oneOf) && schema.oneOf.length === 2, `${definition.name}: oneOf(plan, task) expected`)
+    assert.equal(schema.type, undefined, `${definition.name}: oneOf must not be combined with a top-level type`)
+    const [planBranch, taskBranch] = schema.oneOf
+    assert.deepEqual(planBranch.required, ['plan_id', 'status', 'kind'])
+    assert.equal(planBranch.additionalProperties, false)
+    assert.equal(planBranch.properties.duration.type, 'number')
+    assert.deepEqual(taskBranch.required, ['task_id', 'status'])
+    assert.equal(taskBranch.additionalProperties, false)
+    assert.equal(taskBranch.properties.duration.type, 'number')
+    // A value missing the branch identifier is rejected by the host, not accepted.
+    assert.ok(
+      validateJsonSchemaValue(schema, { status: 'queued' }, 'value').length > 0,
+      `${definition.name}: a task-shaped value without task_id must be refused`,
+    )
+    assert.ok(
+      validateJsonSchemaValue(schema, { status: 'prepared', kind: 'generate' }, 'value').length > 0,
+      `${definition.name}: a prepared value without plan_id must be refused`,
+    )
+  } else {
+    assert.equal(schema.type, 'object')
+    assert.ok(Array.isArray(schema.required))
+    assert.ok(schema.properties !== undefined)
+  }
 }
+
+const paidPreparedRender = generate.output.render({}, {
+  plan_id: 'p-1',
+  status: 'prepared',
+  kind: 'regenerate',
+  estimate: '¥1.50 CNY known; worst case ¥3.00 CNY',
+  requested_duration: 5,
+  source_actual_duration: 12.25,
+  diagnostics: [],
+})
+assert.match(paidPreparedRender[0].text, /plan_id: p-1/)
+assert.match(paidPreparedRender[0].text, /prepared: regenerate/)
+
+// Fail-loud proof that the boundary above is not a no-op: both payload shapes
+// reported by the user (an own `ratio: undefined` after a real submit, and a
+// task-shaped value missing its task id) are rejected as the host rejects them.
+assert.throws(
+  () => assertHostResult(task, { task_id: 'T1' }, { task_id: 'T1', status: 'queued', duration: 5, ratio: undefined }),
+  /non-lossless JSON/,
+)
+assert.throws(
+  () => assertHostResult(task, { task_id: 'T1' }, { status: 'queued', duration: 5 }),
+  /missing required property/,
+)
 
 const sampleValue = {
   task_id: '123',
@@ -1011,7 +1117,13 @@ function harness({ cwd = tempDir('h3-cwd-'), stateDir = tempDir('h3-state-'), co
       return map.get(toolName)
     },
     async run(toolName, args) {
-      return map.get(toolName).execute(args, { agent: { id: 'test' }, signal: undefined })
+      const definition = map.get(toolName)
+      assert.ok(definition !== undefined, `unknown tool ${toolName}`)
+      const result = await definition.execute(args, execContext)
+      // Every successful result goes through the host's output boundary, so a
+      // regression like an own `undefined` field or an output.schema mismatch
+      // fails here exactly as it would fail in the real tool pipeline.
+      return assertHostResult(definition, args, result)
     },
   }
 }
@@ -1817,6 +1929,242 @@ try {
         /original input materials not reviewable|worst-case upper bound/,
       )
       assert.equal(calls.calls.length, 0)
+    } finally {
+      calls.restore()
+    }
+  }
+
+  // 10c. host output boundary: measured fractional 768P source seconds reach the
+  // paid 2K regeneration tools as output. The pre-fix prepare/task output schema
+  // declared `duration: {type:'integer'}`, which the host rejects for 12.25 /
+  // 10.125 / 328÷24 s; that rejection is asserted here through the same boundary.
+  {
+    const durations = [
+      { label: '8', seconds: 8, timescale: 1000, expected: 8 },
+      { label: '12.25', seconds: 12.25, timescale: 1000, expected: 12.25 },
+      { label: '10.125', seconds: 10.125, timescale: 1000, expected: 10.125 },
+      // 328 frames at 24 fps is exactly 328000/24000 s in the container.
+      { label: '328/24', seconds: 328 / 24, timescale: 24000, expected: 328 / 24 },
+    ]
+    for (const entry of durations) {
+      const h = harness()
+      const file = join(h.cwd, `source-${entry.label.replace('/', '-')}.mp4`)
+      writeFileSync(file, mp4Buffer(entry.seconds, entry.timescale))
+      const calls = mockFetch(() => {
+        throw new Error('fractional-duration prepare must stay offline')
+      })
+      try {
+        const prepared = await h.run('video_prepare', {
+          kind: 'regenerate',
+          video: file,
+          prompt: 'Same 2K prompt.',
+        })
+        assert.equal(prepared.status, 'prepared')
+        assert.equal(prepared.duration, entry.expected)
+        assert.equal(prepared.source_actual_duration, Number(entry.expected.toFixed(3)))
+        assert.equal(prepared.mode, 'reference')
+        assert.equal('ratio' in prepared, false, 'a regeneration plan has no declared output ratio')
+        assert.equal('requested_duration' in prepared, false, 'no original record means no requested duration')
+        assert.equal(calls.calls.length, 0)
+        assert.equal(h.credentialCalls.count, 0)
+        // The harness must reject the schema that shipped with the reported bug.
+        const integerSchema = {
+          ...prepare.output.schema,
+          properties: { ...prepare.output.schema.properties, duration: { type: 'integer' } },
+        }
+        assert.throws(
+          () => assertHostResult({ ...prepare, output: { ...prepare.output, schema: integerSchema } }, {}, { ...prepared, duration: 12.25 }),
+          /must be an integer/,
+        )
+      } finally {
+        calls.restore()
+      }
+    }
+  }
+
+  // 10d. dry_run on the paid tools returns the prepared shape and must still
+  // satisfy the tool's own output.schema at the host boundary.
+  {
+    const h = harness()
+    const file = join(h.cwd, 'dry-source.mp4')
+    writeFileSync(file, mp4Buffer(12.25))
+    const calls = mockFetch(() => {
+      throw new Error('dry_run must stay offline')
+    })
+    try {
+      const dryRegen = await h.run('video_regenerate', {
+        video: file,
+        prompt: 'Same 2K prompt.',
+        plan_id: '',
+        dry_run: true,
+      })
+      assert.equal(dryRegen.status, 'prepared')
+      assert.equal(dryRegen.kind, 'regenerate')
+      assert.equal(dryRegen.duration, 12.25)
+      assert.match(dryRegen.plan_id, /^p-/)
+      assert.ok(existsSync(join(h.stateDir, 'plans', `plan-${dryRegen.plan_id}.json`)))
+      const dryGenerate = await h.run('video_generate', { prompt: 'A cup on a table.', duration: 8, dry_run: true, plan_id: '' })
+      assert.equal(dryGenerate.status, 'prepared')
+      assert.equal(dryGenerate.kind, 'generate')
+      assert.equal(dryGenerate.requested_duration, 8)
+      const dryEnhance = await h.run('video_prompt_enhance', { prompt: 'A cup on a table.', dry_run: true, plan_id: '  ' })
+      assert.equal(dryEnhance.status, 'prepared')
+      assert.equal(dryEnhance.kind, 'prompt_enhance')
+      assert.match(dryEnhance.plan_id, /^p-/)
+      await assert.rejects(
+        () => h.run('video_generate', {
+          prompt: 'A cup on a table.', duration: 8, dry_run: true, plan_id: dryGenerate.plan_id,
+        }),
+        /use either dry_run or plan_id/,
+      )
+      assert.equal(calls.calls.length, 0)
+      assert.equal(h.credentialCalls.count, 0)
+    } finally {
+      calls.restore()
+    }
+  }
+
+  // 10e. wait:false 2K regeneration: one submit, host-valid queued result with
+  // fractional duration and no `ratio: undefined`, journaled task id, held
+  // budget; the same task then continues through video_task (mocked) to success.
+  {
+    const h = harness()
+    const file = join(h.cwd, 'source-12.25.mp4')
+    writeFileSync(file, mp4Buffer(12.25))
+    await h.run('video_budget', { action: 'create', budget_id: 'b-frac', limit: 20, currency: 'CNY' })
+    const calls = mockFetch((call) => {
+      if (call.url.endsWith('/v2/video_regeneration')) return jsonResponse({ task_id: 'T140' })
+      if (call.url.includes('/v2/query/video_generation/T140')) {
+        return jsonResponse({
+          task: {
+            id: 'T140',
+            status: 'succeeded',
+            content: { url: 'https://cdn.example.com/T140.mp4?token=SIGNED-TOKEN' },
+            usage: { output_seconds: 12.25 },
+          },
+        })
+      }
+      if (call.url.startsWith('https://cdn.example.com/')) return mp4Response()
+      return undefined
+    })
+    try {
+      const submitted = await h.run('video_regenerate', {
+        video: file,
+        prompt: 'Same 2K prompt.',
+        budget_id: 'b-frac',
+        plan_id: '',
+        wait: false,
+      })
+      assert.equal(submitted.task_id, 'T140')
+      assert.equal(submitted.status, 'queued')
+      assert.equal(submitted.duration, 12.25)
+      assert.equal(submitted.resolution, '2K')
+      assert.equal('ratio' in submitted, false, 'the reported wait:false bug leaked ratio: undefined after a real submit')
+      assert.equal(calls.calls.length, 1, 'wait:false submits exactly once')
+      const record = recordsOf(h.stateDir).find((entry) => entry.task_id === 'T140')
+      assert.ok(record !== undefined, 'the accepted task id must be journaled before returning')
+      assert.equal(record.status, 'submitted')
+      assert.equal(budgetOf(h.stateDir, 'b-frac').reservations[0].status, 'held')
+
+      const queried = await h.run('video_task', { task_id: submitted.task_id, download: false })
+      assert.equal(queried.task_id, 'T140')
+      assert.equal(queried.status, 'succeeded')
+      assert.equal(queried.record_id, record.record_id)
+      assert.equal('file' in queried, false, 'download:false must not claim a saved file')
+      assert.equal(calls.calls.length, 2)
+      assert.equal(budgetOf(h.stateDir, 'b-frac').reservations[0].status, 'settled')
+      assert.equal(recordsOf(h.stateDir).find((entry) => entry.task_id === 'T140').status, 'succeeded')
+
+      // The duplicate gate still refuses an identical resubmission of the same
+      // fractional-source request after the first task exists.
+      await assert.rejects(
+        () => h.run('video_regenerate', { video: file, prompt: 'Same 2K prompt.', budget_id: 'b-frac', wait: false }),
+        /allow_duplicate/,
+      )
+      assert.equal(calls.calls.length, 2)
+    } finally {
+      calls.restore()
+    }
+  }
+
+  // 10f. wait:true 2K regeneration success with download:false also stays
+  // host-valid; the old wait:true return re-added the same undefined plan fields.
+  {
+    const h = harness()
+    const file = join(h.cwd, 'source-8s.mp4')
+    writeFileSync(file, mp4Buffer(8))
+    const calls = mockFetch((call) => {
+      if (call.url.endsWith('/v2/video_regeneration')) return jsonResponse({ task_id: 'T141' })
+      if (call.url.includes('/v2/query/video_generation/T141')) {
+        return jsonResponse({
+          task: { id: 'T141', status: 'succeeded', content: { url: 'https://cdn.example.com/T141.mp4' } },
+        })
+      }
+      return undefined
+    })
+    try {
+      const result = await h.run('video_regenerate', {
+        video: file,
+        prompt: 'Same 2K prompt.',
+        wait: true,
+        download: false,
+      })
+      assert.equal(result.status, 'succeeded')
+      assert.equal(result.task_id, 'T141')
+      assert.equal(result.duration, 8)
+      assert.equal(result.url, 'https://cdn.example.com/T141.mp4')
+      assert.equal('file' in result, false, 'download:false must not report a downloaded file')
+      assert.equal('ratio' in result, false)
+      assert.equal(calls.calls.length, 2)
+    } finally {
+      calls.restore()
+    }
+  }
+
+  // 10g. an unknown source_task_id has no measurable original duration: the
+  // prepared output must omit duration/ratio instead of returning undefined.
+  {
+    const h = harness()
+    const calls = mockFetch(() => {
+      throw new Error('unknown byTask prepare must stay offline')
+    })
+    try {
+      const prepared = await h.run('video_prepare', {
+        kind: 'regenerate',
+        source_task_id: 'remote-only-task',
+      })
+      assert.equal(prepared.status, 'prepared')
+      assert.equal(prepared.original_inputs_unknown, true)
+      assert.equal('duration' in prepared, false)
+      assert.equal('ratio' in prepared, false)
+      assert.equal('source_actual_duration' in prepared, false)
+      assert.equal(calls.calls.length, 0)
+      assert.equal(h.credentialCalls.count, 0)
+    } finally {
+      calls.restore()
+    }
+  }
+
+  // 10h. requested generation seconds stay whole: fractional durations are
+  // refused before credentials or any network call.
+  {
+    const h = harness()
+    const calls = mockFetch(() => {
+      throw new Error('a fractional generation duration must stay offline')
+    })
+    try {
+      for (const duration of [12.25, 10.125, 328 / 24, 4.5]) {
+        await assert.rejects(
+          () => h.run('video_prepare', { prompt: 'A cup on a table.', duration }),
+          /integer/,
+        )
+        await assert.rejects(
+          () => h.run('video_generate', { prompt: 'A cup on a table.', duration, wait: false }),
+          /integer/,
+        )
+      }
+      assert.equal(calls.calls.length, 0)
+      assert.equal(h.credentialCalls.count, 0)
     } finally {
       calls.restore()
     }

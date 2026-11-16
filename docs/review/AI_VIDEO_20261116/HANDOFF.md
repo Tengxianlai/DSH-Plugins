@@ -19,7 +19,7 @@
 | 部分 | 版本 | 行为 |
 |---|---|---|
 | dsh-image-gen | 0.4.0 | 离线预演、required/hash参考契约、真实输入输出收据、并发防覆盖、原2K/4K费用门保留 |
-| dsh-minimax-video | 0.2.1 | 7工具、计划与累计预算、可恢复journal、来源/原句/QC/源规格检查；兼容登记项目未用asset_ids空占位，附生产CLI与新项目技能 |
+| dsh-minimax-video | 0.2.2 | 7工具、计划与累计预算、可恢复journal、来源/原句/QC/源规格检查；兼容未用asset_ids空占位、实际小数秒及宿主JSON返回边界，附生产CLI与新项目技能 |
 | dsh-gemini | 0.4.0 | 本地技术QA优先、音视频目的/证据预检、默认不扩大预算重试、逐次usage累计与未知量标记 |
 | dsh-gemini-creative | 0.4.0 | 写作分工与必要综合判断边界，链接新项目生产技能 |
 
@@ -36,6 +36,16 @@
 独立DeepSeek复核通过。全仓9插件通过，生产48/48、0跳过，包含真实本地ASR，验证期间及之后源码无漂移：[0.2.1验收记录](integration/ASSET_BINDING_021_VERIFY.json)、[原始日志](integration/ASSET_BINDING_021_VERIFY.log)。托管disable→enable均applied；真实v06已批准首帧加完整空槽位及空预算ID的native `video_prepare`通过；填真实ID但不给媒体的反例仍拒。详见[运行态证据](integration/ASSET_BINDING_021_RUNTIME.json)。测试plan不执行，不提交新视频，不改v06素材、登记表或预算上限。
 
 原生工具空占位用 `''`/`[]` 或省略；不要改传 `null`，现行SDK参数类型校验会先拒绝。CLI/direct可处理null。当前piTool路径使用默认strict:false；严格schema转换的required行为是兼容性检查，不是已证实的本次会话报错原因。工具参数DSL结构保持原样，无oneOf扩张。
+
+## 0.2.2 补丁：再生成返回值（2026-11-17）
+
+用户指定会话后段又暴露两项返回边界错误：合法768源12.25/10.125/13.666…秒被预检的整数duration输出schema拒绝；再生成已获task_id后，未知ratio等字段作为own-undefined返回，触发宿主lossless-JSON错误。此前mock直接调用execute，漏掉了宿主随后对返回值的快照与schema校验。
+
+两项输出duration现允许number；生成请求duration和requested_duration仍要求整数。提交后的queued及同步等待结果均省略未知元数据，保留真实小数秒。三个付费工具干跑结果使用独立的prepared/task严格输出分支与相应渲染器；未使用的空白plan_id按省略处理，真实plan仍执行互斥、peek/claim及一次性检查。未修改请求体、来源/QC、费用估算、cap、预算、指纹、去重或journal；不裁片、不取整、不重交已有任务。
+
+自测harness补入宿主同款JSON快照、输出schema、deepFreeze与render快照校验，并保留旧错误形态必拒的反例。全仓9插件全绿，生产48/48、0跳过（真实本地ASR启用）；4种源秒数、三工具dry_run、同步/异步提交、同单查询、真实plan消费/去重均有离线回归。最后冻结版本见[最终验收](integration/SDK_OUTPUT_022_VERIFY_FINAL.json)与[原始日志](integration/SDK_OUTPUT_022_VERIFY_FINAL.log)；未带_FINAL的记录是末次空plan占位补丁前的先前检查。
+
+托管重载disable/enable均applied；原生video_regenerate对真实12.25秒源dry_run成功，使用完整空槽位、空预算ID及空plan_id，未产生付费调用。随后只查询原保障车2K任务，已succeeded；没有新下单或修改素材/批准/预算上限。[运行态证据](integration/SDK_OUTPUT_022_RUNTIME.json)区分12秒原申请、12.25秒源实测与API返回的12秒2K结果，没有用整数改写测量。
 
 ## 长期本地ASR
 

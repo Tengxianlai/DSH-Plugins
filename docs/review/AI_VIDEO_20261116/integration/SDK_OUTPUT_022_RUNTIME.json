@@ -1,0 +1,18 @@
+{
+  "schema": "dsh.ai-video-runtime-output-verification/1",
+  "date_local": "2026-11-17",
+  "plugin": "dsh-minimax-video",
+  "plugin_version": "0.2.2",
+  "profile": "web",
+  "managed_reload": {"disable": "applied", "enable": "applied", "process_restart": false},
+  "checks": [
+    {"tool": "video_regenerate", "dry_run": true, "project": "tanlu-motion-v06-scheme-a-20261116", "shot": "CAR_A1", "source_duration_seconds": 12.25, "requested_original_seconds": 12, "native_full_field_empty_asset_slots": true, "empty_plan_id": true, "result": "prepared", "plan_id": "p-mwjhgibs-ee8546", "plan_executed": false, "render": "prepared: regenerate MiniMax-H3 2K 12.25s", "paid_call_made": false, "estimate_status": "partial", "estimate_floor_cny": 3.675, "estimate_upper_cny": 7.35, "max_cost_cny": 7.37},
+    {"tool": "video_task", "task_id": "464045227647496", "download": false, "wait": false, "result": "succeeded", "resolution": "2K", "api_reported_output_duration_seconds": 12, "record_id": "r-mwjgfrio-0ff5131b", "existing_task_only": true, "new_submission": false},
+    {"mode": "cold apply with real registered project and actual SDK", "tool": "video_prepare", "kind": "regenerate", "source_duration_seconds": 12.25, "result": "prepared", "ratio_field_present": false, "json_snapshot_passed": true, "output_schema_passed": true, "render_passed": true, "credential_reads": 0, "network_calls": 0, "plan_id": "p-mwjh0i0d-51f52a", "plan_executed": false}
+  ],
+  "new_video_submissions": 0,
+  "project_media_changed": false,
+  "project_approvals_changed": false,
+  "budget_limit_changed": false,
+  "verification_limits": ["No new paid submit was used to verify the queued or wait:true return paths; these are covered by mocked HTTP and the host's actual JSON/schema/render functions.", "The existing task status query is read-only remotely and refreshes its normal local journal/cache; it is not a new generation or regeneration.", "Actual source duration, original requested duration and API-reported 2K output duration remain separate values; no source file or measurement was rounded or trimmed."]
+}
