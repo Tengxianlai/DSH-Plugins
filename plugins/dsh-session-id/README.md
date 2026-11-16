@@ -25,7 +25,10 @@ session-81e19121-b2fc-4a0b-99d1-d8fc7199945d
   不用等网络。点得太早（查询还没回来）就先复制 id，并补发一次查询。
 - **挂载**：`cordis.patch.yml` 里一条 `insert`（`id: session-id`，`name: dsh-session-id`）。
 
-生效：改宿主半边（`index.js`）要重启 dsh-web；改浏览器半边（`client.js`）刷新页面。
+生效：改宿主半边（`index.js`）标准路径是重启 dsh-web；改浏览器半边（`client.js`）刷新页面。
+本机开着 HMR 时，宿主半边也能热换：触发一次 profile 重组合即可（2026-11-16 实测：临时创建
+`$DSH_HOME/cordis.patch.yml` 再删掉，dsh-hmr 会在重组合时替换 link 目标里改过的模块，
+只换本插件、其他会话的 turn 不受影响；没必要为此重启进程）。
 
 ## 测试
 
