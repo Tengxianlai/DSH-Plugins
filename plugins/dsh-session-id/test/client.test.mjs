@@ -250,8 +250,17 @@ const errorStatus = (status) => ({ ok: false, status, json: async () => ({ error
   assert.ok(view.tree.props.title.includes(CWD), 'tooltip 应显示工作目录');
   assert.equal(view.tree.props.title.includes('存储目录读取中'), false);
 
+  const labeled = [
+    `${t('labelId')}${SESSION_ID}`,
+    `${t('labelDir')}${DIR}`,
+    `${t('labelCwd')}${CWD}`
+  ].join('\n');
+  assert.equal(view.tree.props.title, `${labeled}\n${t('hintCopyAll')}`, 'tooltip 与剪贴板同文 + 点击说明');
+  assert.ok(labeled.includes('存储目录（会话日志所在）'), '存储目录行要有用途说明');
+  assert.ok(labeled.includes('工作目录（会话启动时的项目目录）'), '工作目录行要有用途说明');
+
   await view.tree.props.onClick();
-  assert.deepEqual(clipboardWrites, [SESSION_ID + '\n' + DIR + '\n' + CWD], '应复制三行：ID / 存储目录 / 工作目录');
+  assert.deepEqual(clipboardWrites, [labeled], '应复制三行带说明：ID / 存储目录 / 工作目录');
   assert.equal(calls.length, 1, '目录已知时点击不再重复查询');
 
   view.update();
@@ -273,9 +282,9 @@ const errorStatus = (status) => ({ ok: false, status, json: async () => ({ error
   assert.ok(view.tree.props.title.includes('暂不可用'));
 
   await view.tree.props.onClick();
-  assert.deepEqual(clipboardWrites, [SESSION_ID]);
+  assert.deepEqual(clipboardWrites, [`${t('labelId')}${SESSION_ID}`]);
   view.unmount();
-  console.log('ok  未落盘会话：只复制 ID，不编造目录');
+  console.log('ok  未落盘会话：只复制带说明的 ID，不编造目录');
 }
 
 // 3) 路由查不到（旧宿主 / 404）：同样只复制 ID，并在点击时补查一次
@@ -290,7 +299,7 @@ const errorStatus = (status) => ({ ok: false, status, json: async () => ({ error
   assert.ok(view.tree.props.title.includes('暂不可用'));
 
   await view.tree.props.onClick();
-  assert.deepEqual(clipboardWrites, [SESSION_ID]);
+  assert.deepEqual(clipboardWrites, [`${t('labelId')}${SESSION_ID}`]);
   assert.equal(calls.length, 2, '点击时应该补查一次（宿主路由可能刚上线）');
   view.unmount();
   console.log('ok  路由不可用：只复制 ID，点击补查');
@@ -307,14 +316,17 @@ const errorStatus = (status) => ({ ok: false, status, json: async () => ({ error
   assert.ok(view.tree.props.title.includes('读取中'));
 
   await view.tree.props.onClick();
-  assert.deepEqual(clipboardWrites, [SESSION_ID], '查询未返回时先复制 ID');
+  assert.deepEqual(clipboardWrites, [`${t('labelId')}${SESSION_ID}`], '查询未返回时先复制带说明的 ID');
   assert.equal(calls.length, 2, '点击应补发一次查询（旧的被取消）');
   release(okBody({ sessionId: SESSION_ID, log: LOG, dir: DIR, cwd: null }));
   await settle();
   view.update();
   assert.equal(view.tree.props['data-dsh-session-dir'], DIR);
   await view.tree.props.onClick();
-  assert.deepEqual(clipboardWrites, [SESSION_ID, SESSION_ID + '\n' + DIR], '工作目录未知时复制两行');
+  assert.deepEqual(clipboardWrites, [
+    `${t('labelId')}${SESSION_ID}`,
+    `${t('labelId')}${SESSION_ID}\n${t('labelDir')}${DIR}`
+  ], '工作目录未知时复制两行（ID + 存储目录，各带说明）');
   view.unmount();
   console.log('ok  点得早：先复制 ID 再补查，目录回来后进 tooltip（无 cwd 时两行）');
 }

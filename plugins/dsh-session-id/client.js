@@ -3,11 +3,11 @@
  * dsh-session-id —— 浏览器半边。
  *
  * 在会话标题栏（标题右侧那排 chip 的末尾）显示当前会话 ID 的短形式。
- * 点击把三行写进剪贴板（已知几个写几个）：
+ * 点击把三行带说明的文字写进剪贴板（已知几个写几个），粘给别的会话不用猜：
  *
- *   session-<uuid>
- *   /home/<user>/<dsh home>/sessions/--<project>--/session-<uuid>/
- *   /home/<user>/<project>
+ *   会话 ID：session-<uuid>
+ *   存储目录（会话日志所在）：/home/<user>/<dsh home>/sessions/--<project>--/session-<uuid>/
+ *   工作目录（会话启动时的项目目录）：/home/<user>/<project>
  *
  * 第二行是这个会话在磁盘上的存储目录（`session.v4.jsonl.zstd` 所在目录），
  * 粘给另一个会话，对方就能直接去读那份日志，不用再翻 URL / 问用户路径；
@@ -51,23 +51,32 @@ window.__ModuleLoader__.load({
       '.sid_badgeCopied .sid_icon{opacity:1}'
     ].join('')
 
-    /** 字典：标题栏这一处只用到这几条文案（tooltip 按"目录已知/读取中/不可用"三态取词）。 */
+    /**
+     * 字典：粘进剪贴板的每行都带角色说明（label*），tooltip 按
+     * "目录已知 / 读取中 / 不可用"三态拼词，另外两条是点击动作说明。
+     */
     const DICT = {
       zh: {
         copy: '复制会话 ID、存储目录与工作目录',
         copied: '已复制',
-        hint: '会话 ID：{id}\n存储目录：{dir}\n工作目录：{cwd}\n点击复制以上三项',
-        hintDirOnly: '会话 ID：{id}\n存储目录：{dir}\n点击复制 ID 与存储目录',
-        hintPending: '会话 ID：{id}\n存储目录读取中…\n点击复制 ID',
-        hintUnavailable: '会话 ID：{id}\n存储目录暂不可用（会话未落盘或已不存在）\n点击复制 ID'
+        labelId: '会话 ID：',
+        labelDir: '存储目录（会话日志所在）：',
+        labelCwd: '工作目录（会话启动时的项目目录）：',
+        hintCopyAll: '点击复制以上内容',
+        hintCopyId: '点击复制会话 ID',
+        pending: '存储目录读取中…',
+        unavailable: '存储目录暂不可用（会话未落盘或已不存在）'
       },
       en: {
         copy: 'Copy session ID, storage dir and working dir',
         copied: 'Copied',
-        hint: 'Session ID: {id}\nStorage dir: {dir}\nWorking dir: {cwd}\nClick to copy all three',
-        hintDirOnly: 'Session ID: {id}\nStorage dir: {dir}\nClick to copy the ID and storage dir',
-        hintPending: 'Session ID: {id}\nReading storage dir…\nClick to copy the ID',
-        hintUnavailable: 'Session ID: {id}\nStorage dir unavailable (session not on disk yet or deleted)\nClick to copy the ID'
+        labelId: 'Session ID: ',
+        labelDir: 'Storage dir (where this session log lives): ',
+        labelCwd: 'Working dir (project directory of this session): ',
+        hintCopyAll: 'Click to copy everything above',
+        hintCopyId: 'Click to copy the session ID',
+        pending: 'Reading storage dir…',
+        unavailable: 'Storage dir unavailable (session not on disk yet or deleted)'
       }
     }
 
@@ -102,16 +111,24 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 复制文本：完整 ID、会话存储目录、会话工作目录各一行（已知几个写几个）。
-     * 存储目录拿不到（未落盘/已删除/路由不可用）时只写 ID 一行——不猜路径。
+     * 复制文本：每行前面带角色说明，粘给别的会话时对方不用猜哪行是什么。
+     *
+     *   会话 ID：session-<uuid>
+     *   存储目录（会话日志所在）：/home/…/sessions/--项目--/session-<uuid>/
+     *   工作目录（会话启动时的项目目录）：/home/…/项目
+     *
+     * 存储目录拿不到（未落盘/已删除/路由不可用）时只写带说明的 ID 一行——不猜路径。
      * @param {string} sessionId - 完整会话 ID。
      * @param {object} location - 位置状态。
+     * @param {Function} t - 本命名空间的字典函数。
      * @returns {string} 写入剪贴板的文本。
      */
-    function copyText(sessionId, location) {
-      if (location === null || location.phase !== 'ready' || location.dir === null) return sessionId
-      const lines = [sessionId, location.dir]
-      if (location.cwd !== null) lines.push(location.cwd)
+    function copyText(sessionId, location, t) {
+      const lines = [t('labelId') + sessionId]
+      if (location !== null && location.phase === 'ready' && location.dir !== null) {
+        lines.push(t('labelDir') + location.dir)
+        if (location.cwd !== null) lines.push(t('labelCwd') + location.cwd)
+      }
       return lines.join('\n')
     }
 
@@ -263,7 +280,7 @@ window.__ModuleLoader__.load({
       const onClick = async () => {
         const current = locationRef.current
         try {
-          await writeClipboard(copyText(sessionId, current))
+          await writeClipboard(copyText(sessionId, current, t))
         } catch {
           return
         }
@@ -277,15 +294,17 @@ window.__ModuleLoader__.load({
         if (!(current.phase === 'ready' && current.dir !== null)) loadLocation(sessionId)
       }
 
+      // tooltip 与剪贴板同文：看到什么就会复制什么（末尾再加一行点击说明）。
+      const idLine = t('labelId') + sessionId
       let hint
       if (location.phase === 'ready' && location.dir !== null) {
-        hint = location.cwd !== null
-          ? t('hint', { id: sessionId, dir: location.dir, cwd: location.cwd })
-          : t('hintDirOnly', { id: sessionId, dir: location.dir })
+        const lines = [idLine, t('labelDir') + location.dir]
+        if (location.cwd !== null) lines.push(t('labelCwd') + location.cwd)
+        hint = [...lines, t('hintCopyAll')].join('\n')
       } else if (location.phase === 'loading') {
-        hint = t('hintPending', { id: sessionId })
+        hint = [idLine, t('pending'), t('hintCopyId')].join('\n')
       } else {
-        hint = t('hintUnavailable', { id: sessionId })
+        hint = [idLine, t('unavailable'), t('hintCopyId')].join('\n')
       }
 
       return react.createElement('button', {

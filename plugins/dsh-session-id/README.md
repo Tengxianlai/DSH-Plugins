@@ -1,17 +1,17 @@
 # dsh-session-id
 
-在 DSH Web 的会话标题栏显示当前会话 ID，点一下把三行一起复制到剪贴板（已知几个写几个）：
+在 DSH Web 的会话标题栏显示当前会话 ID，点一下把三行**带说明**的文字复制到剪贴板（已知几个写几个）：
 
 ```text
-session-81e19121-b2fc-4a0b-99d1-d8fc7199945d
-/home/me/.dsh-wsl/sessions/--home-me-DSH_ZONE-Projects-DSH-Plugins--/session-81e19121-b2fc-4a0b-99d1-d8fc7199945d
-/home/me/DSH_ZONE/Projects/DSH-Plugins
+会话 ID：session-81e19121-b2fc-4a0b-99d1-d8fc7199945d
+存储目录（会话日志所在）：/home/me/.dsh-wsl/sessions/--home-me-DSH_ZONE-Projects-DSH-Plugins--/session-81e19121-b2fc-4a0b-99d1-d8fc7199945d
+工作目录（会话启动时的项目目录）：/home/me/DSH_ZONE/Projects/DSH-Plugins
 ```
 
-第一行是完整 session id，第二行是这个会话**在磁盘上的存储目录**（`session.v4.jsonl.zstd` 所在目录），
-第三行是会话的工作目录。把这段贴给另一个会话，对方就能直接去读日志/排查，不用再翻 URL 或问路径；
-工作目录那行让对方同时知道项目在哪。目录拿不到时（宿主路由缺失、会话还没落盘、或日志已删除）
-退回只复制 id——复制动作永远不被查询拖住。
+每行前面的说明就是给"粘过去的那一边"看的：第一行完整 session id（用来定位/恢复会话），
+第二行是这个会话**在磁盘上的存储目录**（`session.v4.jsonl.zstd` 所在目录，直接去读日志/排查），
+第三行是会话的工作目录（项目在哪）。不用再翻 URL 或问路径。目录拿不到时（宿主路由缺失、
+会话还没落盘、或日志已删除）退回只复制带说明的 ID——复制动作永远不被查询拖住。
 
 ## 组成
 
@@ -21,7 +21,7 @@ session-81e19121-b2fc-4a0b-99d1-d8fc7199945d
   （存储根是 profile 配置，浏览器算不出来），只读文件元信息与 header：不读事件日志、不创建 Agent；
   失败只回错误码，不回显可能带主机绝对路径的异常文本。
 - **浏览器半边**（`client.js`）：渲染截断后的 id 与复制交互。挂载时预查一次存储位置，
-  拿到后 tooltip 显示「会话 ID / 存储目录 / 工作目录」；点击时同步读缓存并复制三行，
+  拿到后 tooltip 与剪贴板同文（每行带角色说明）；点击时同步读缓存并复制，
   不用等网络。点得太早（查询还没回来）就先复制 id，并补发一次查询。
 - **挂载**：`cordis.patch.yml` 里一条 `insert`（`id: session-id`，`name: dsh-session-id`）。
 
