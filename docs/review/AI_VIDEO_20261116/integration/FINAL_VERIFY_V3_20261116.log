@@ -1,0 +1,277 @@
+
+> verify
+> node scripts/verify.mjs
+
+
+=== dsh-claude
+  ✓ name dsh-claude@0.1.0
+  ✓ private: true
+  ✓ bundle 补丁 ./cordis.patch.yml
+  ✓ 语法 index.js
+  ✓ README.md
+  ✓ 图标 icon.svg（444 B）
+dsh-claude: ok
+  ✓ 插件自测
+
+=== dsh-deliverable-download
+  ✓ name dsh-deliverable-download@0.1.0
+  ✓ private: true
+  ✓ bundle 补丁 ./cordis.patch.yml
+  ✓ 语法 lib/index.js
+  ✓ 语法 ./client.js
+  ✓ README.md
+  ✓ 图标 icon.svg（466 B）
+
+=== 宿主半体自测
+ok  两条路由注册（GET / buffered）
+ok  交付卡片 200 附件响应 / 头 / 非 ASCII 文件名
+ok  交付卡片工作区根：cwd → 回退 sandboxPolicy
+ok  变更卡片 200（用摘要的 cwd 解析第 index 个变更文件）
+ok  400 非法坐标（两条路由）
+ok  404 事件类型 / 序号 / 摘要不可用 / 空路径
+ok  422 主机路径不可信
+ok  FS 失败码映射
+ok  MIME 回退与非 ASCII 文件名编码
+ok  查询层失败码 → 404（顶层/嵌套都认），未知码仍 500
+ok  插件面 name/inject
+
+全部通过
+
+=== 浏览器半体自测
+ok  模块信封：id 与 load 调用
+ok  三个槽位注册 + 字典 + 样式
+ok  交付卡片地址改写（tooltip 走字典，不是原始 key）
+ok  变更卡片地址改写
+ok  只认官方坐标路由，其余不渲染
+ok  预览标题栏文件路由 + 文件名（tooltip 带文件名插值）
+ok  预览标题栏边界（相对路径/UNC/控制字符拒绝，Windows 绝对路径接受）
+ok  点击阻止冒泡
+
+全部通过
+
+=== 语法检查 lib/index.js
+
+=== 语法检查 client.js
+
+=== 对账检查
+ok   宿主路由：/api/present.download, /api/changes.download
+ok   坐标改写对上：api/present.open → api/present.download
+ok   坐标改写对上：api/changes.open → api/changes.download
+ok   安装软链指向本仓：/home/tengxlper/.dsh-wsl/profiles/web/node_modules/dsh-deliverable-download
+ok   profile 的 dsh.profile.bundles 里有本插件
+ok   依赖以 link: 记录：link:/home/tengxlper/DSH_ZONE/Projects/DSH-Plugins/plugins/dsh-deliverable-download
+ok   profile 自己的 patch 里没有重复挂载行
+ok   现在时文件在位：README.md
+ok   现在时文件在位：STATE.md
+ok   现在时文件里引用的仓内路径都存在（7 处）
+ok   已停用术语：暂无（机制保留）
+
+对账通过
+
+质量门全绿
+  ✓ 插件自测
+
+=== dsh-gemini
+  ✓ name dsh-gemini@0.4.0
+  ✓ private: true
+  ✓ bundle 补丁 ./cordis.patch.yml
+  ✓ 语法 index.js
+  ✓ README.md
+  ✓ 图标 ./icon.svg（385 B）
+dsh-gemini: ok
+  ✓ 插件自测
+
+=== dsh-gemini-creative
+  ✓ name dsh-gemini-creative@0.4.0
+  ✓ private: true
+  ✓ bundle 补丁 ./cordis.patch.yml
+  ✓ 语法 index.js
+  ✓ README.md
+  ✓ 图标 ./icon.svg（373 B）
+dsh-gemini-creative: ok
+  ✓ 插件自测
+
+=== dsh-image-gen
+  ✓ name dsh-image-gen@0.4.0
+  ✓ private: true
+  ✓ bundle 补丁 ./cordis.patch.yml
+  ✓ 语法 index.js
+  ✓ README.md
+  ✓ 图标 icon.svg（396 B）
+dsh-image-gen: verify ok
+  ✓ 插件自测
+
+=== dsh-minimax-video
+  ✓ name dsh-minimax-video@0.2.0
+  ✓ private: true
+  ✓ bundle 补丁 ./cordis.patch.yml
+  ✓ 语法 index.js
+  ✓ README.md
+  ✓ 图标 icon.svg（763 B）
+✔ schema and hash invariants for a normal clip (463.386951ms)
+✔ container-declared frames verify coverage but are marked as container metadata (90.229033ms)
+✔ a black clip passes decode but stays review_required with content unasserted (86.902455ms)
+✔ a static clip is suspected as static without claiming what it shows (91.699621ms)
+✔ a clip without an audio stream still reports video evidence (90.291843ms)
+✔ a container without nb_frames never claims original completeness (89.820264ms)
+✔ scanAll=false never claims decode or completeness (35.422213ms)
+✔ caller frame expectation drives completeness and can fail (90.090669ms)
+✔ caller duration expectation drives the duration verdict (93.392188ms)
+✔ a truncated file is reported as fail or unreadable, never as pass (95.368906ms)
+✔ invalid options and missing files raise coded errors (0.473216ms)
+✔ fake ASR with a different source hash is rejected, not merged (75.497759ms)
+✔ fake ASR that exits non-zero is kept as partial evidence, not a pass (127.56151ms)
+✔ fake ASR output with a matching hash is passed through and bound (126.317418ms)
+✔ real local ASR binds source hash and reports words on two existing clips (4079.818913ms)
+✔ real local ASR on silence does not force a transcript match (1677.533072ms)
+✔ fileSha256 streams the same digest as a whole-file hash; publicSource redacts URL paths (12.478561ms)
+✔ approved keyframe inherits verified character and scene roots (3.721023ms)
+✔ same bytes are ambiguous without asset_ids and bind when declared (3.288366ms)
+✔ unregistered, candidate and changed roots cannot silently enter generation (1.268258ms)
+✔ cross-shot assets and keyframes are refused; same-shot alternates are bound (1.726259ms)
+✔ keyframe role is slot-bound: screenshots need a reason, not just an ancillary keyframe (2.38397ms)
+✔ dialogue must be in the prompt; punctuation/whitespace differences only warn (4.05035ms)
+✔ registered roots stop text-only requests and a voice reference cannot replace the prompt line (1.084809ms)
+✔ shot selection, approval evidence and remote inputs are enforced (1.896349ms)
+✔ origin is required for production assets and only known classifications pass (51.323795ms)
+✔ budget is not skipped by --all; audit results stay separate (1.664501ms)
+✔ audit lineage never satisfies this request's required-root coverage (4.971825ms)
+✔ references binds current hashes and requires coverage; drift and archive policy are visible (139.262096ms)
+✔ archived sources warn by default, reject by policy, and adoption overrides the old rejection (1.610781ms)
+✔ malformed request fields become issues, not TypeErrors (1.672024ms)
+✔ symlinked project roots resolve to the real root instead of looking external (1.757305ms)
+✔ source_task_id in a registered project needs a bound local source and QC (1.902729ms)
+✔ CLI request envelope is unwrapped and provenance is not self-approved (140.467711ms)
+✔ CLI parses --root=, rejects unknown flags/commands/duplicates, and help exits 0 (306.495345ms)
+✔ dead project locks are reclaimed; a live lock still blocks updates (91.11166ms)
+✔ approval accepts declared user/director/agent with authority and appends history (179.362223ms)
+✔ ASR runtime resolution: flags > env > toolchain file > project venv (2.608239ms)
+✔ CLI inspect reports a clear ASR configuration error instead of downloading (48.239404ms)
+✔ inspect calls local-qa, keeps the evidence invariant, and writes once (331.701784ms)
+✔ QC rejects fabricated/scope-less evidence, rejects mismatched ASR as a pass, and appends history (499.705087ms)
+✔ black/static frames stay suspicion, while frame_scan only certifies decode and coverage (230.086282ms)
+✔ source_task_id needs a task-id mapping and retained QC before it can bind a local source (315.151732ms)
+✔ schema files are valid JSON and match the validator constants (0.544295ms)
+✔ 2K regeneration binds accepted evidence and the H3 physical source spec (1337.603852ms)
+✔ H3 regeneration source spec gate checks every physical parameter from a real evidence report (759.555327ms)
+✔ regeneration rejects a non-H3 source spec before any paid call (422.826106ms)
+ℹ tests 47
+ℹ suites 0
+ℹ pass 47
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7415.98698
+dsh-minimax-video: 7 tools, prepare/plan, preflight contracts, cost cap + budget ledger, durable journal, sanitized assets, regen drift, download naming and recovery verified offline (all network mocked)
+  ✓ 插件自测
+
+=== dsh-notify
+  ✓ name dsh-notify@0.4.0
+  ✓ private: true
+  ✓ bundle 补丁 ./cordis.patch.yml
+  ✓ 语法 index.js
+  ✓ 语法 ./client.js
+  ✓ README.md
+  ✓ 图标 icon.svg（3685 B）
+dsh-notify · client
+  ✓ 模块信封：id 与宿主 SSE 端点一致，四类提示音齐全
+  ✓ apply 订阅横幅流并挂手势监听，卸载时全部收掉
+  ✓ 收到帧就弹通知：正文来自宿主，静音、可点击聚焦
+  ✓ 带 sound 的帧会合成提示音，并让系统通知闭嘴
+  ✓ 音频没解锁时不排队，改让系统通知自己响一声
+  ✓ 未知类别或浏览器不支持 Web Audio 时安静返回 false
+  ✓ 首次手势解锁音频并申请通知权限（只申请一次）
+  ✓ 通知权限被明确拒绝时不弹（声音仍走页面）
+  ✓ 自测计划：10 条、四类轮流、声音类别跟着走
+  ✓ 自测每 10 秒一条，10 条后自动停表
+  ✓ 坏帧与缺标题的帧被丢弃
+
+通过：11 项通过，0 项失败
+  ✓ 自测 client.test.mjs
+dsh-notify
+  ✓ 配置默认值与非法值回落到默认
+  ✓ 声音路由：页面优先，macOS + auto 保留宿主原生提示音
+  ✓ 静音判定认 none 与空串
+  ✓ 时长格式化
+  ✓ 截断按码点走，不劈开 emoji
+  ✓ 回合结束的正文按原因分档
+  ✓ 审批与提问的正文带上关键信息
+  ✓ 会话标题：标题服务优先，其次工作目录名
+  ✓ 长回合结束会通知，标题带会话名，正文带耗时
+  ✓ 短回合按门槛静音
+  ✓ 门槛 0 时每轮都提醒；fork 复制历史不算干完活
+  ✓ 同一会话内的连续提醒会被去重
+  ✓ 审批旁听会通知，并把决定权原样交回 next()
+  ✓ 旁听自身出错也不影响审批链路
+  ✓ 提问通知带问题数
+  ✓ 子代理会话默认静音，includeSubagents 打开后才提醒
+  ✓ 各自开关独立生效
+  ✓ 提示音配置透传给 sink；会话销毁后计时表被清空
+  ✓ 卸载后不再有监听器
+  ✓ 提示音解析：系统音名 / 绝对路径 / none / 非 macOS
+  ✓ osascript 参数：正文/标题各占一个 argv，不拼进脚本
+  ✓ macOS 上先发通知再放提示音；none 时只发通知
+  ✓ WSL 探测：环境变量、/proc/version、非 linux 都不误判
+  ✓ WSL 提示音按类别映射到 Windows 系统 wav，静音与自定义路径不硬映射
+  ✓ PowerShell 脚本：编码可还原，标题/正文不进脚本文本
+  ✓ WSL 宿主：放音与 Toast 都经 powershell.exe，互操作参数正确
+  ✓ WSL 自定义绝对路径只 warn 一次（请把声音交给页面）
+  ✓ powershell.exe 优先走已挂载的绝对路径，找不到再交给 PATH
+  ✓ 不支持的系统 / 启动失败只 warn 一次，不抛错
+  ✓ 四类时机默认四种不同的提示音
+  ✓ 异常结束单独成类：标题「本轮出错」，音效用 error 那一档
+  ✓ 三类提醒各自带自己的音效
+  ✓ 只改某一类音效，其余保持默认
+  ✓ sound 一刀切（含 none）覆盖四类
+  ✓ 插件入口不把返回值交给 Cordis（普通对象会被当成非法 effect）
+  ✓ 浏览器半体连着时：横幅走页面，声音也交给页面（Linux 宿主）
+  ✓ macOS 宿主 + auto：页面连着时仍由宿主放原生提示音
+  ✓ soundChannel: host 强制宿主发声；sound: none 时页面也不响
+  ✓ SSE 路由只接受 GET；卸载时路由与连接一起收掉
+
+通过：39 项通过，0 项失败
+  ✓ 自测 host.test.mjs
+
+=== dsh-playwright-per-agent
+  ✓ name dsh-playwright-per-agent@0.2.0
+  ✓ private: true
+  ✓ bundle 补丁 ./cordis.patch.yml
+  ✓ 语法 index.js
+  ✓ README.md
+  ✓ 图标 icon.svg（478 B）
+dsh-playwright-per-agent host contract: ok
+  ✓ 自测 host.test.mjs
+
+=== dsh-session-id
+  ✓ name dsh-session-id@0.2.0
+  ✓ private: true
+  ✓ bundle 补丁 ./cordis.patch.yml
+  ✓ 语法 index.js
+  ✓ 语法 ./client.js
+  ✓ README.md
+  ✓ 图标 icon.svg（296 B）
+ok  模块信封：id 与 load 调用
+ok  槽位注册 + 字典 + 样式
+ok  成功路径：复制三行（ID / 存储目录 / 工作目录）
+ok  未落盘会话：只复制带说明的 ID，不编造目录
+ok  路由不可用：只复制 ID，点击补查
+ok  点得早：先复制 ID 再补查，目录回来后进 tooltip（无 cwd 时两行）
+ok  切会话：重查 + 取消旧请求 + 不串目录
+ok  会话 ID 未就绪：不渲染、不发请求
+
+全部通过
+  ✓ 自测 client.test.mjs
+ok  路由注册：GET /api/session.location（buffered）
+ok  200：dir/log/cwd 原样解析
+ok  未落盘会话：dir/log/cwd 均 null，不编造路径
+ok  缺 sessionId → 400，不触达存储
+ok  查无会话 → 404
+ok  持久化服务缺失 → 503
+ok  读取失败 → 500 且不回显异常文本
+ok  客户端已取消 → 499
+dsh-session-id host contract: ok
+  ✓ 自测 host.test.mjs
+
+------------------------------------------------
+体检全绿：9 个插件（dsh-claude, dsh-deliverable-download, dsh-gemini, dsh-gemini-creative, dsh-image-gen, dsh-minimax-video, dsh-notify, dsh-playwright-per-agent, dsh-session-id）
