@@ -206,7 +206,7 @@ The order is a checklist, not a required sentence order. The final prompt should
 | 28 | ~15 s | practical maximum |
 | 34 | >15 s | too fast or truncated |
 
-Rule of thumb: `seconds ≈ words / 3.3 / 0.57`. Speech fills roughly 57% of a clip. Leave a beat after the line; a 15 s clip with 28 words is already tight.
+English planning heuristic: `seconds ≈ words / 3.3 / 0.57`; the fill factor is an allowance, not a measured speech interval. The table is not a Chinese word-count rule. Chinese needs character/syllable-based planning and an actual local ASR plus waveform check after generation. Requested duration, returned source duration, spoken interval and used edit interval must remain separate. Leave breathing/tail room; do not mechanically truncate an adopted short source or its last syllable.
 
 ## Final check
 

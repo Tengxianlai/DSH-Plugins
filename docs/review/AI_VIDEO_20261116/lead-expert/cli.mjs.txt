@@ -1,0 +1,133 @@
+#!/usr/bin/env node
+/** Local-only AI video project/asset/QA entry point. No credentials, model API or package install. */
+import { existsSync, mkdirSync, openSync, closeSync, writeFileSync, readFileSync, renameSync, unlinkSync, realpathSync } from 'node:fs'
+import { dirname, relative, resolve } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
+import { PROJECT_SCHEMA, fileSha256, loadProject, validateProductionInputs } from './project.js'
+
+const argv = process.argv.slice(2), command = argv.shift(), flags = {}
+for (let i = 0; i < argv.length; i++) {
+  if (!argv[i].startsWith('--')) throw new Error(`Expected an option, got ${argv[i]}`)
+  const k = argv[i].slice(2); flags[k] = argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : true
+}
+const cwd = resolve(flags.root || process.cwd())
+function required(key) { if (typeof flags[key] !== 'string' || !flags[key]) throw new Error(`--${key} is required`); return flags[key] }
+function csv(key) { return typeof flags[key] === 'string' ? flags[key].split(',').map(x => x.trim()).filter(Boolean) : [] }
+function saveNew(file, data) { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, JSON.stringify(data, null, 2) + '\n', { flag: 'wx', mode: 0o600 }) }
+function project() { const p = loadProject({ cwd, manifest: flags.manifest }); if (!p) throw new Error('No .ai-video/project.json; run init first.'); return p }
+function update(fn) {
+  const p = project(), lock = resolve(dirname(p.file), '.project.lock'), token = randomUUID(); let fd
+  try {
+    fd = openSync(lock, 'wx', 0o600); writeFileSync(fd, token); closeSync(fd); fd = undefined
+    const current = loadProject({ cwd, manifest: flags.manifest }); fn(current)
+    const tmp = resolve(dirname(p.file), `.project-${token}.tmp`); saveNew(tmp, current.data); renameSync(tmp, p.file)
+  } finally {
+    if (fd !== undefined) closeSync(fd)
+    if (existsSync(lock) && readFileSync(lock, 'utf8') === token && dirname(realpathSync(lock)) === realpathSync(dirname(p.file))) unlinkSync(lock)
+  }
+  return { manifest: p.file, updated: true }
+}
+function execute(program, args, maxBuffer = 64 * 1024 * 1024) {
+  const p = spawnSync(program, args, { encoding: 'utf8', maxBuffer, timeout: 15 * 60 * 1000, windowsHide: true })
+  if (p.error) throw new Error(`${program}: ${p.error.code || p.error.message}`)
+  return p
+}
+function inspect() {
+  const file = resolve(cwd, required('file')), hash = fileSha256(file)
+  const probe = execute('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file])
+  if (probe.status !== 0) throw new Error('ffprobe failed; verify the local media file and ffprobe installation.')
+  const metadata = JSON.parse(probe.stdout), video = metadata.streams?.find(s => s.codec_type === 'video')
+  const result = { schema: 'dsh.ai-video-local-qa/1', source: relative(cwd, file), source_sha256: hash, metadata, scope: ['container_metadata'], status: 'collected', cannot_prove: ['natural acting', 'identity consistency', 'lip sync', 'subjective sound approval', 'customer acceptance'] }
+  if (flags['scan-all']) {
+    if (!video) throw new Error('--scan-all needs a video stream')
+    const scan = execute('ffmpeg', ['-v', 'error', '-xerror', '-err_detect', 'explode', '-i', file, '-map', '0:v:0', '-vf', 'scale=320:-2,signalstats,metadata=print:file=-', '-an', '-f', 'null', '-'])
+    const y = [...scan.stdout.matchAll(/lavfi\.signalstats\.YAVG=([\d.]+)/g)].map(m => Number(m[1])); const declared = Number(video.nb_frames)
+    result.scope.push('all_decoded_frames_at_320px_metrics')
+    result.frame_scan = { status: scan.status === 0 && y.length > 0 && (!Number.isFinite(declared) || declared === y.length) ? 'pass' : 'fail', source_sha256: hash, decoded_frames: y.length, declared_frames: Number.isFinite(declared) ? declared : null, decode_exit: scan.status, min_mean_luma: y.length ? Math.min(...y) : null, max_mean_luma: y.length ? Math.max(...y) : null, near_black_frame_count: y.filter(v => v < 18).length, note: 'Every decoded frame is measured after scaling to 320px; these signals do not classify hands, lip sync, identity, or performance.' }
+    if (result.frame_scan.status !== 'pass') result.status = 'failed'
+  }
+  if (flags['asr-model']) {
+    const script = fileURLToPath(new URL('./local_asr.py', import.meta.url))
+    const asr = execute(flags['asr-python'] || 'python3', [script, '--file', file, '--model', resolve(cwd, flags['asr-model']), '--language', flags.language || 'zh', ...(flags.expected ? ['--expected', String(flags.expected)] : [])])
+    if (asr.status !== 0) throw new Error(`Local ASR failed without remote fallback: ${asr.stderr.slice(0, 800)}`)
+    result.asr = JSON.parse(asr.stdout); result.scope.push('local_asr')
+  }
+  const out = resolve(cwd, required('out')); saveNew(out, result)
+  return { report: out, source_sha256: hash, status: result.status, decoded_frames: result.frame_scan?.decoded_frames, note: 'Evidence collected locally; an agent must review its scope and record separate acting/identity/voice decisions. No cloud model was called.' }
+}
+function main() {
+  if (command === 'init') {
+    const file = resolve(cwd, '.ai-video/project.json')
+    saveNew(file, { schema: PROJECT_SCHEMA, project_id: required('id'), project_root: '..', budget: null, policy: { require_budget: true, allow_external_assets: false, regeneration_requires_qc: ['frame_scan', 'motion_review'] }, assets: [], shots: [] })
+    return { manifest: file, note: 'No assets have been approved and no spending budget has been granted. Register actual approved sources and a scoped budget before paid generation.' }
+  }
+  if (command === 'budget') return update(p => {
+    const id = required('id'), limit = Number(required('limit')), currency = flags.currency || 'CNY', evidence = required('evidence')
+    if (!Number.isFinite(limit) || limit <= 0 || !['CNY', 'USD'].includes(currency)) throw new Error('Budget needs a positive explicit limit and CNY/USD currency')
+    if (p.data.budget && !flags.amend) throw new Error('An existing budget cannot be replaced silently; use --amend --reason and reconcile the video_budget ledger separately')
+    if (p.data.budget) required('reason')
+    p.data.history ??= []; p.data.history.push({ kind: 'budget_declaration', at: new Date().toISOString(), previous: p.data.budget, id, limit, currency, evidence, reason: flags.reason || null })
+    p.data.budget = { id, limit, currency, authorization_evidence: evidence, declared_not_independently_verified: true }
+  })
+  if (command === 'request') {
+    const p = project(), shot = p.data.shots.find(s => s.id === required('shot')); if (!shot) throw new Error('Unknown shot')
+    const keys = shot.keyframes ?? []; const keyId = flags['keyframe-id'] || shot.primary_keyframe || (keys.length === 1 ? keys[0] : null)
+    if (!keyId || !keys.includes(keyId)) throw new Error('Choose a registered same-shot keyframe explicitly when several states are available')
+    const key = p.data.assets.find(a => a.id === keyId); if (!key) throw new Error('Keyframe asset is missing')
+    const voices = (shot.voice_refs ?? []).map(id => { const a = p.data.assets.find(a => a.id === id); if (!a || a.kind !== 'audio') throw new Error(`Invalid registered voice reference ${id}`); return a })
+    const duration = Number(required('duration')); if (!Number.isInteger(duration) || duration < 4 || duration > 15) throw new Error('Requested duration must be an explicit integer 4-15; validate its model-specific limits with video_prepare')
+    const args = { project_manifest: relative(cwd, p.file), shot_id: shot.id, prompt: readFileSync(resolve(cwd, required('prompt-file')), 'utf8'), model: required('model'), resolution: flags.resolution || '768P', duration, dialogue: shot.dialogue ?? [], source_declarations: [key.id, ...voices.map(a => a.id)], approved_sources: [key.id, ...voices.map(a => a.id)] }
+    if (voices.length) { args.reference_images = [resolve(p.root, key.path)]; args.reference_audio = voices.map(a => resolve(p.root, a.path)); args.reference_roles = ['approved same-shot composition, identity and scene lineage', ...voices.map(a => `voice timbre reference ${a.id}; spoken words come from explicit dialogue`)] }
+    else args.first_frame = resolve(p.root, key.path)
+    if (flags.ratio || voices.length) args.ratio = flags.ratio || '16:9'
+    if (flags['max-cost']) args.max_cost = Number(flags['max-cost'])
+    if (flags['override-reason']) args.keyframe_override_reason = flags['override-reason']
+    const validation = validateProductionInputs({ cwd, args }); const out = resolve(cwd, required('out'))
+    saveNew(out, { schema: 'dsh.ai-video-request/1', args, validation, note: voices.length ? 'Reference mode carries keyframe composition plus voice timbre; it does not pin an exact first frame. Review actual source images before submitting.' : 'Opening frame comes from the declared approved keyframe, including its verified roots. Review actual image before submitting.' })
+    if (validation.issues.length) process.exitCode = 2
+    return { file: out, selected_keyframe: key.id, inherited_roots: key.root_ids ?? [], ready_for_offline_prepare: validation.issues.length === 0, issues: validation.issues, note: 'No network or model call. Pass the args object to video_prepare before paid submission.' }
+  }
+  if (command === 'register') return update(p => {
+    const id = required('id'); if (p.data.assets.some(a => a.id === id)) throw new Error('Asset id already exists; use a new version id.')
+    const file = resolve(cwd, required('file')), kind = required('kind')
+    if (!['character', 'scene', 'keyframe', 'image', 'video', 'audio'].includes(kind)) throw new Error('Unsupported asset kind')
+    p.data.assets.push({ id, kind, path: relative(p.root, file), sha256: fileSha256(file), approval: 'candidate', origin: flags.origin || 'generated_original', root_ids: csv('roots'), registered_at: new Date().toISOString() })
+  })
+  if (command === 'approve') return update(p => {
+    const a = p.data.assets.find(a => a.id === required('id')); if (!a) throw new Error('Unknown asset')
+    const by = required('by'); if (!['user', 'director'].includes(by)) throw new Error('--by must be user or director; model PASS alone is not approval')
+    const evidence = required('evidence'), file = resolve(p.root, a.path); if (fileSha256(file) !== a.sha256) throw new Error('Asset bytes changed; register a new version first.')
+    a.approval = by === 'user' ? 'user_approved' : 'director_approved'; a.approval_evidence = evidence; a.approved_at = new Date().toISOString()
+  })
+  if (command === 'shot') return update(p => {
+    const spec = JSON.parse(readFileSync(resolve(cwd, required('spec')), 'utf8')); if (!spec.id || p.data.shots.some(s => s.id === spec.id)) throw new Error('Shot spec needs a new unique id')
+    p.data.shots.push(spec)
+  })
+  if (command === 'qc') return update(p => {
+    const a = p.data.assets.find(a => a.id === required('id')); if (!a) throw new Error('Unknown asset')
+    const evidence = resolve(cwd, required('evidence')); const report = JSON.parse(readFileSync(evidence, 'utf8')); const hash = fileSha256(resolve(p.root, a.path))
+    if (report.source_sha256 !== hash) throw new Error('QC evidence belongs to different source bytes')
+    const kind = required('kind'); if (!['frame_scan', 'asr', 'motion_review', 'voice_review', 'identity_review'].includes(kind)) throw new Error('Unknown QC kind')
+    const status = required('status'); if (!['pass', 'fail', 'review_required'].includes(status)) throw new Error('QC status must be pass, fail, or review_required')
+    const note = required('note'); if (kind === 'frame_scan' && status === 'pass' && report.frame_scan?.status !== 'pass') throw new Error('Frame scan did not pass in the retained local report')
+    a.qc ??= {}; a.qc[kind] = { status, source_sha256: hash, evidence: relative(p.root, evidence), evidence_sha256: fileSha256(evidence), reviewed_by: required('by'), note, recorded_at: new Date().toISOString() }
+  })
+  if (command === 'check') {
+    const args = flags.request ? JSON.parse(readFileSync(resolve(cwd, flags.request), 'utf8')) : {}
+    if (flags.manifest) args.project_manifest = flags.manifest
+    const result = validateProductionInputs({ cwd, args, verifyAll: Boolean(flags.all) }); if (result.issues.length) process.exitCode = 2; return result
+  }
+  if (command === 'references') {
+    const p = project(), shot = p.data.shots.find(s => s.id === required('shot'))
+    if (!shot) throw new Error('Unknown shot')
+    const ids = [...new Set([...(shot.characters ?? []), ...(shot.scenes ?? []), ...(shot.keyframes ?? [])])]
+    const roles = { character: 'identity_root', scene: 'scene_card', keyframe: 'keyframe', image: 'other' }
+    const references = ids.map(id => { const a = p.data.assets.find(a => a.id === id); if (!a) throw new Error(`Unknown asset ${id}`); return { image: resolve(p.root, a.path), role: roles[a.kind] || 'other', approved: ['approved', 'user_approved', 'director_approved', 'locked'].includes(a.approval), source: id, note: `Approval is recorded in the project manifest; check sha256 and approval_evidence before use.`, sha256: a.sha256 } })
+    const out = resolve(cwd, required('out')); saveNew(out, { schema: 'dsh.ai-video-references/1', project: p.data.project_id, shot_id: shot.id, references }); return { file: out, count: references.length, note: 'Choose the references needed for this operation; an approved keyframe already carries its recorded roots. Do not blindly send every image.' }
+  }
+  if (command === 'inspect') return inspect()
+  return { usage: ['init --root DIR --id NAME', 'register --id ID --kind character|scene|keyframe|video|audio --file PATH [--roots ID,ID]', 'approve --id ID --by user|director --evidence DECISION', 'shot --spec SHOT.json', 'check [--request REQUEST.json] [--all]', 'references --shot ID --out REFERENCES.json', 'inspect --file MEDIA --out REPORT.json [--scan-all] [--asr-model LOCAL_DIR --asr-python PYTHON --expected TEXT]', 'qc --id ASSET --kind frame_scan|asr|motion_review|voice_review|identity_review --status pass|fail|review_required --evidence REPORT.json --by REVIEWER --note SCOPE'], note: 'All commands are local. No API keys, cloud calls, dependency installs, automatic approvals, or overwrites.' }
+}
+try { console.log(JSON.stringify(main(), null, 2)) } catch (error) { console.error(JSON.stringify({ error: error.message })); process.exitCode = 1 }

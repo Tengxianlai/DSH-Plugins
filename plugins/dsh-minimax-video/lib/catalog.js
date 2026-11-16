@@ -294,12 +294,22 @@ export function planGeneration({
       `${model} duration must be an integer from ${spec.minDuration} to ${spec.maxDuration} seconds (got ${duration})`,
     )
   }
+  let effectivePromptExpansion = promptExpansion
   if (promptExpansion !== undefined) {
-    if (!spec.promptExpansion) {
-      throw new Error(`prompt_expansion is only supported by MiniMax-H3-Max (got ${model})`)
-    }
     if (!PROMPT_EXPANSION_MODES.includes(promptExpansion)) {
       throw new Error(`unknown prompt_expansion "${promptExpansion}"; use ${PROMPT_EXPANSION_MODES.join(', ')}`)
+    }
+    if (!spec.promptExpansion) {
+      if (promptExpansion === 'disabled') {
+        // Full native-tool serialization sends every field. On a non-Max tier
+        // "disabled" is a no-op, not an unsupported API field: strip it so the
+        // request never carries prompt_expansion for a tier that cannot use it.
+        effectivePromptExpansion = undefined
+      } else {
+        throw new Error(
+          `prompt_expansion ${promptExpansion} is only supported by MiniMax-H3-Max (got ${model}); non-Max tiers accept disabled as a no-op`,
+        )
+      }
     }
   }
   return {
@@ -308,7 +318,7 @@ export function planGeneration({
     resolution: chosenResolution,
     duration,
     ratio: normalizeRatio({ ratio, mode, model }),
-    ...(promptExpansion === undefined ? {} : { promptExpansion }),
+    ...(effectivePromptExpansion === undefined ? {} : { promptExpansion: effectivePromptExpansion }),
   }
 }
 
@@ -354,7 +364,7 @@ export function estimateGenerationCost({
 /** Render the model-facing catalog: tiers, matrix, prices, limits, chooser. */
 export function catalogText(region = 'cn') {
   const lines = [
-    'MiniMax H3 / Hailuo 3 video catalog. Price snapshot 2026-11-15; list prices per second unless noted.',
+    'MiniMax H3 / Hailuo 3 video catalog. Price snapshot 2026-11-16; list prices per second unless noted.',
     '',
     'TIER          MODEL                    RESOLUTIONS   DURATION   REFERENCE INPUT',
     'quality       MiniMax-H3               768P, 2K      4-15 s     image, video, audio',
@@ -373,9 +383,17 @@ export function catalogText(region = 'cn') {
     'VIDEO INPUT: billed per input second at the output resolution rate; Max has its own input rate.',
     'AUDIO INPUT: free. All task types share the same unit price for a model/resolution.',
     '',
-    'REGENERATION (768P -> 2K, MiniMax-H3 768P output only):',
-    '  output ¥0.30 | $0.05 per second + input video ¥0.30 | $0.05 per second + images beyond 5 at ¥0.15 | $0.025.',
-    '  A 5 s 768P clip + 5 s regeneration costs about ¥5.50 in total, versus ¥4.00 for direct 2K generation.',
+    'REGENERATION (768P -> 2K; any H3-family 768P output: standard H3, Highspeed or Lite):',
+    '  Direct 2K generation is only available on standard MiniMax-H3; any approved 768P H3-family output',
+    '  can use the official regeneration channel.',
+    '  Output video ¥0.30 | $0.05 per second; input video ¥0.30 | $0.05 per second; images beyond 5 at',
+    '  ¥0.15 | $0.025. Original task input materials are billed again: reference videos by original input',
+    '  duration, audio free. Whether the base clip adds another input-video charge is unconfirmed, so',
+    '  estimates are floor/upper partial, never an invoice.',
+    '  Example 5 s standard-H3 768P + 5 s regeneration: generation ¥2.50; regeneration floor ¥1.50',
+    '  (output video only); upper ¥3.00 if the base clip also pays input video. Pipeline ~¥4.00-¥5.50,',
+    '  comparable to direct 2K ¥4.00, not automatically more expensive. Original reference-video seconds',
+    '  add ¥0.30/s to both floor and upper.',
     'CONTEXT-IR (prompt enhancement): ¥5.80 | $0.90 per M input tokens, ¥23.00 | $3.60 per M output tokens.',
     '',
     'MODES: no media = text-to-video. first_frame/last_frame = image-to-video. reference_* =',
@@ -390,7 +408,16 @@ export function catalogText(region = 'cn') {
     'total <= 15 s). Whole request body <= 64 MB. Output is one 4-15 s clip with native audio.',
     '',
     'CHOOSE: draft/iterate Lite 480P 4 s (about ¥0.64); everyday Highspeed 768P; final H3 2K;',
-    'multi-asset reference Max; 2K from an existing H3 768P clip -> video_regenerate.',
+    'multi-asset reference Max; 2K from an approved H3-family 768P clip -> video_regenerate',
+    '(estimate is a floor/upper partial, not an invoice).',
+    '',
+    'COST & SAFETY: call video_prepare (or dry_run:true) for a no-cost plan, diagnostic list and',
+    'estimate. max_cost is a hard per-call cap; budget_id (or a project manifest budget) enforces a',
+    'cross-call ceiling with conservative reservations. Every submit is journaled before the network',
+    'call and an unknown outcome blocks a silent retry of the same request.',
+    'ESTIMATE STATUS: complete = every billed input known; partial = floor/upper bound (remote inputs,',
+    'or regeneration where the base-clip charge is unconfirmed); unknown = token-priced Context-IR,',
+    'which cannot be capped or budgeted before the call.',
     '',
     `Current base URL region: ${region}. Call video_models again after changing config.`,
   ]

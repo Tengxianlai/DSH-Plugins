@@ -26,7 +26,7 @@ const RESOURCE_BASE = {
 const RANK = 600
 
 const DESCRIPTION =
-  'Use when the user asks to write or revise a script, screenplay, dialogue, narration, or copy, or to review scene images, storyboards, PDFs, and other materials against a script — including Chinese requests such as 写剧本、对白、旁白、文案、分镜、场景图、素材对照、长文分析。Routes the task to Gemini 4 Argon through the gemini tool.'
+  'Use when the user asks to write or revise a script, screenplay, dialogue, narration, or copy, or to review scene images, storyboards, PDFs, and materials against a script — including 写剧本、对白、旁白、文案、分镜、场景图、素材对照、长文分析。Routes writing to Gemini 4 Argon. Not for technical QC: local tools and subagents handle ASR, full-frame signal scans, ffprobe and decoding. Identity, lip-sync and acting judgments require scoped actual-media review; a necessary Gemini editorial review remains available with purpose and local evidence. Start or resume AI-film projects by loading ai-video-production and reusing approved assets from the project registry.'
 
 const CANDIDATE = {
   name: SKILL_NAME,

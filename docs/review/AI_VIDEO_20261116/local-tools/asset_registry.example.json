@@ -1,0 +1,604 @@
+{
+  "_meta": {
+    "schema": "ai-video.asset-registry/1 (minimal)",
+    "purpose": "示例用真实 TanLu-CJU75th 资产与 sha256，展示最小可实现的 asset_registry + shot plan + local QA evidence。字段定义见 ASSET_REGISTRY_CONTRACT.md。",
+    "project": "~/DSH_ZONE/VideoStudio/Projects/TanLu-CJU75th",
+    "generated_at": "2026-11-16T18:35:00+08:00",
+    "generated_by": "local-tools-auditor (task-9, read-only)",
+    "note": "本文件是审计产物，不是项目生产 registry；不改动任何被引用文件。",
+    "measured_at": "2026-11-16",
+    "known_measured_issues": [
+      "CHAR_001.IDENTITY_ROOT.1950 content generated 2026-11-15T15:03:50+08:00 (tool filename 07:03:50 UTC; .work/v02/gen/rang3/...ROOT3_T1, sha aed16ce1...). All 90 ANIMATIC_v01 keyframe records (04:28-07:07+08) predate it, so 0 refs there is expected. The v04 repair batch (25 ADOPT* decisions, 19 REBUILD_v04 images in USER_SELECTED) was generated later (18:52-20:35+08) but has no generation records and its adoption QC used the A reference, so root usage is unprovable; the frozen USER_SELECTED -> 2K first_frame chain has no back-propagation.",
+      "SCENES_4K/ENV sidecar out_sha256/bytes match .work/scene3_png_originals/<same>.png 28/28 (raw downloaded PNG). Delivered .jpg are converted JPEGs (unchanged since 2026-11-13 12:50, same sha as the Mac receive snapshot); the PNG->JPEG conversion did not refresh the sidecar and its script is unrecorded. This is an artifact/field mismatch, not corruption.",
+      "S03_001 adopted keyframe filename contains *_REJECTED_*, its record says REJECTED_NOT_DELIVERED, but the user confirmed it in the picker and it is in the final film; adoption overrides old rejection state.",
+      "Order input fields are named differently per batch: inputs.image (ORDERS_B3_B7) vs media_sha256 (REGEN_2K); same semantics, different schema."
+    ]
+  },
+  "assets": [
+    {
+      "asset_id": "CHAR_001.MASTER.1938",
+      "family": "character",
+      "role": "history_master",
+      "file": "03_CHARACTERS/CHAR_001/refs/CHAR_001_MASTER_v01.webp",
+      "sha256": "b906630cc9591bc0187a8a980a6fa5b8b37ff59f7f2b53a31470f35984cc2fb2",
+      "bytes": 0,
+      "approval": {
+        "state": "APPROVED",
+        "by": "user",
+        "at": "2026-11-11",
+        "evidence": "03_CHARACTERS/CHAR_001/NOTES.md#依据"
+      },
+      "scope": {
+        "lines": [
+          "1938"
+        ],
+        "shots": [],
+        "valid_for": [
+          "identity_reference"
+        ]
+      },
+      "root": null,
+      "dependencies": [],
+      "provenance": {
+        "record": "03_CHARACTERS/CHAR_001/NOTES.md",
+        "tool": "historic archive photo",
+        "note": "一手：1938 延安抗大合影"
+      },
+      "notes": "所有穰明德身份派生的最终依据；不得把派生彩图当一手证据。"
+    },
+    {
+      "asset_id": "CHAR_001.IDENTITY_ROOT.1950",
+      "family": "character",
+      "role": "identity_root",
+      "file": "03_CHARACTERS/CHAR_001/designs/CHAR_001_IDENTITY_ROOT_1950_v01.png",
+      "sha256": "aed16ce19975dafb6422bcf465fecb60c9757949910346ca33ac8750b92aa96b",
+      "bytes": 4650347,
+      "approval": {
+        "state": "APPROVED",
+        "by": "user",
+        "at": "2026-11-15",
+        "evidence": "03_CHARACTERS/INDEX.md#CHAR_001"
+      },
+      "scope": {
+        "lines": [
+          "1950",
+          "1951"
+        ],
+        "shots": [
+          "S02_004",
+          "S02_010",
+          "S03_001",
+          "S04_002",
+          "S04_003",
+          "S04_004",
+          "S04_006",
+          "S04_007"
+        ],
+        "valid_for": [
+          "keyframe_gen",
+          "poster"
+        ]
+      },
+      "root": "CHAR_001.MASTER.1938",
+      "dependencies": [
+        {
+          "asset_id": "CHAR_001.MASTER.1938",
+          "sha256": "b906630cc9591bc0187a8a980a6fa5b8b37ff59f7f2b53a31470f35984cc2fb2",
+          "role": "骨相/身份唯一一手依据"
+        }
+      ],
+      "provenance": {
+        "record": "03_CHARACTERS/CHAR_001/NOTES.md",
+        "tool": "gpt-image-2.6-sunburst",
+        "note": "A+1938母版派生",
+        "content_record": ".work/v02/LEDGER_v02.json#ROOT3_T1",
+        "generated_at": "2026-11-15T15:03:50+08:00 (tool filename 07:03:50 UTC)"
+      },
+      "notes": "Content generated 2026-11-15T15:03:50+08:00 (tool filename 07:03:50 UTC) as ROOT3_T1; the production path is a byte-identical copy (same sha) whose file mtime 15:19:34+08:00 is a copy time, not an approval time. User decision \"A as sole identity basis\" is logged 2026-11-15 12:14-12:17 in DECISIONS.md; INDEX/NOTES only record the date. It has 0 references in the 90 ANIMATIC_v01 keyframe records, but all 90 (04:28-07:07+08) predate the root content, so that is expected. The v04 repair batch (25 ADOPT* decisions; 19 REBUILD_v04 images in USER_SELECTED) was generated after the root (18:52-20:35+08) but has no generation records and its adoption QC used the A reference; do not read 0 refs as \"agents ignored an available root\"."
+    },
+    {
+      "asset_id": "LOC.TIANQUAN.MASTER.M1",
+      "family": "location",
+      "role": "scene_master",
+      "file": "04_LOCATIONS/ANIMATIC_v01/TIANQUAN/master/TIANQUAN_MASTER_M1_v01.png",
+      "sha256": "29dc82a29bab7685d611b7debe5ade669e5a466617458108e5ba0c100c36e40e",
+      "bytes": 0,
+      "approval": {
+        "state": "APPROVED",
+        "by": "director",
+        "at": "2026-11-15",
+        "evidence": "04_LOCATIONS/ANIMATIC_v01/TIANQUAN/master/TIANQUAN_MASTER_M1_v01.json#review"
+      },
+      "scope": {
+        "lines": [
+          "1950"
+        ],
+        "locations": [
+          "LOC_001"
+        ],
+        "shots": [
+          "S00_001",
+          "S00_002",
+          "S02_001",
+          "S02_002",
+          "S02_003",
+          "S02_012",
+          "S03_001"
+        ],
+        "valid_for": [
+          "keyframe_gen"
+        ]
+      },
+      "root": null,
+      "dependencies": [],
+      "provenance": {
+        "record": "04_LOCATIONS/ANIMATIC_v01/TIANQUAN/master/TIANQUAN_MASTER_M1_v01.json",
+        "model": "gpt-image-2.6-sunburst",
+        "note": "跨 17 条关键帧引用（本项目最高复用根之一）"
+      },
+      "notes": "共同地点根；同地状态（木桥/洪毁/钢架抢修/吊装）必须实际带此图派生。"
+    },
+    {
+      "asset_id": "LOC.BOXGIRDER.MASTER.v01",
+      "family": "location",
+      "role": "scene_master",
+      "file": "04_LOCATIONS/ANIMATIC_v01/BOXGIRDER/BOXGIRDER_ANIMATIC_MASTER_v01.png",
+      "sha256": "42d7d88e589681785a928cf51bf8ffd69f78c6af9852f4118bd328b8253dcc8d",
+      "bytes": 10287440,
+      "approval": {
+        "state": "APPROVED",
+        "by": "director",
+        "at": "2026-11-15",
+        "evidence": "04_LOCATIONS/ANIMATIC_v01/BOXGIRDER/BOXGIRDER_ANIMATIC_MASTER_v01.json#review"
+      },
+      "scope": {
+        "lines": [
+          "2026"
+        ],
+        "locations": [
+          "LOC_004"
+        ],
+        "shots": [
+          "S01_002",
+          "S01_011",
+          "S06_001",
+          "S06_004"
+        ],
+        "valid_for": [
+          "keyframe_gen"
+        ]
+      },
+      "root": null,
+      "dependencies": [
+        {
+          "asset_id": "ENV.S01.boxgirder.v04",
+          "sha256": "aeaed359129b52a7c47c1cf4d185a02187c6cd459036fe29f5cc22f12a9f8ca8",
+          "role": "旧 ENV 卡的齿块/钢梯/平台构造参考"
+        },
+        {
+          "asset_id": "WORK.SCENE_REVIEW.22_disease_MM_v03",
+          "sha256": "",
+          "role": "白霜析钙质感标准"
+        }
+      ],
+      "provenance": {
+        "record": "04_LOCATIONS/ANIMATIC_v01/BOXGIRDER/BOXGIRDER_ANIMATIC_MASTER_v01.json",
+        "model": "gpt-image-2.6-sunburst",
+        "note": "跨 17 条关键帧引用"
+      },
+      "notes": "二维母版不证明纵深另一侧几何；新机位仍须携带此图。"
+    },
+    {
+      "asset_id": "ENV.S01.boxgirder.v04",
+      "family": "location",
+      "role": "scene_state",
+      "file": "04_LOCATIONS/SCENES_4K/ENV/ENV_S01_2026_boxgirder_v04.jpg",
+      "sha256": "aeaed359129b52a7c47c1cf4d185a02187c6cd459036fe29f5cc22f12a9f8ca8",
+      "bytes": 1291188,
+      "approval": {
+        "state": "PENDING",
+        "by": "director",
+        "at": "2026-11-15",
+        "evidence": "04_LOCATIONS/SCENES_4K/ENV/REVIEW.md#第5张"
+      },
+      "scope": {
+        "lines": [
+          "2026"
+        ],
+        "locations": [
+          "LOC_004"
+        ],
+        "shots": [
+          "S01_002",
+          "S01_011",
+          "S06_001"
+        ],
+        "valid_for": [
+          "reference_only"
+        ]
+      },
+      "root": null,
+      "dependencies": [],
+      "provenance": {
+        "record": "04_LOCATIONS/SCENES_4K/ENV/ENV_S01_2026_boxgirder_v04.json",
+        "model": "gpt-image-2.6-sunburst"
+      },
+      "notes": "审查结论“待验收”；当前只作二级参考，不作一级空间根。sidecar 的 out_sha256/bytes 记的是下载原件 PNG（28/28 与 .work/scene3_png_originals 一致），不是交付 JPG。",
+      "artifact": {
+        "downloaded_artifact": {
+          "sha256": "96cfc63a7eabfb582de11a2973aaede4016ff9c9a777e818fab23112564efbb5",
+          "bytes": 9636727,
+          "file_in_repo": ".work/scene3_png_originals/ENV_S01_2026_boxgirder_v04.png",
+          "format": "PNG (raw API bytes)"
+        },
+        "delivered_file": {
+          "sha256": "aeaed359129b52a7c47c1cf4d185a02187c6cd459036fe29f5cc22f12a9f8ca8",
+          "bytes": 1291188,
+          "format": "JPEG",
+          "mtime": "2026-11-13T12:50:08+08:00"
+        },
+        "conversion": {
+          "tool": "unrecorded",
+          "note": "PNG->JPEG conversion replaced delivered files but the sidecar out_sha256/bytes were not refreshed; not corruption"
+        }
+      }
+    },
+    {
+      "asset_id": "PROP_002.ANIMATIC_MASTER",
+      "family": "prop",
+      "role": "prop_root",
+      "file": "05_PROPS/PROP_002/designs/ANIMATIC_v01/PROP_002_ANIMATIC_MASTER_v01.png",
+      "sha256": "55e7210f3183c4cc3a58a36f978a462c0a01a72afac4b35a5d8b77043c381d91",
+      "bytes": 7932972,
+      "approval": {
+        "state": "APPROVED",
+        "by": "director",
+        "at": "2026-11-15",
+        "evidence": "05_PROPS/PROP_002/designs/ANIMATIC_v01/PROP_002_ANIMATIC_MASTER_v01.json#review"
+      },
+      "scope": {
+        "lines": [
+          "2026"
+        ],
+        "shots": [
+          "S01_002",
+          "S01_003",
+          "S01_008",
+          "S01_011",
+          "S05_009",
+          "S06_001",
+          "S06_003",
+          "S06_004",
+          "S06_007"
+        ],
+        "valid_for": [
+          "keyframe_gen"
+        ]
+      },
+      "root": "PROP_002.PATENT.CN117508393A",
+      "dependencies": [
+        {
+          "asset_id": "PROP_002.PATENT.CN117508393A",
+          "sha256": "",
+          "role": "专利附图结构构型"
+        }
+      ],
+      "provenance": {
+        "record": "05_PROPS/PROP_002/designs/ANIMATIC_v01/PROP_002_ANIMATIC_MASTER_v01.json",
+        "model": "gpt-image-2.6-sunburst",
+        "note": "跨 12 条关键帧引用；生产 PROP 卡 A/B 未进入关键帧记录"
+      },
+      "notes": "只批准静演身份，不宣称视频动态已验。"
+    },
+    {
+      "asset_id": "KF.S04_004.f01",
+      "family": "keyframe",
+      "role": "keyframe",
+      "file": "07_SHOT_GENERATION/ANIMATIC_v01/S04/S04_004/S04_004_IN_v01.png",
+      "sha256": "c96fd0c73311e8bca5745eac332ff55168337ca3ec039c4a48cc59edb084ac03",
+      "bytes": 8827672,
+      "width": 3840,
+      "height": 2160,
+      "approval": {
+        "state": "APPROVED",
+        "by": "director",
+        "at": "2026-11-15",
+        "evidence": "07_SHOT_GENERATION/ANIMATIC_v01/S04/S04_004/S04_004_IN_v01.json#status"
+      },
+      "scope": {
+        "shots": [
+          "S04_004"
+        ],
+        "valid_for": [
+          "video_first_frame"
+        ]
+      },
+      "root": "LOC.CAMPUS1951.MASTER",
+      "dependencies": [
+        {
+          "asset_id": "KF.S04_003.f01",
+          "sha256": "bb89bb09fe09ace2b9ed8f069180dc08e450c85eeaca396b75181c10e7de6045",
+          "role": "同场典礼全景（构图/光/背景根）"
+        },
+        {
+          "asset_id": "CHAR_001.DESIGN_C_FINAL",
+          "sha256": "669a1d7fae5b034e47aeb5dad586cbece97fee3fa41cee9e2b2172ffb21bef2b",
+          "role": "穰明德1951定稿（换脸目标）"
+        },
+        {
+          "asset_id": "CHAR_001.MASTER.1938",
+          "sha256": "fefb79a9e8f8bcd11f74e4abdb128d8e3abcca4d9ad9ae660e6d3acd8ec87a7e",
+          "role": "1938母版骨相校准（.work 副本）"
+        }
+      ],
+      "provenance": {
+        "record": "07_SHOT_GENERATION/ANIMATIC_v01/S04/S04_004/S04_004_IN_v01.json",
+        "model": "gpt-image-2.6-sunburst",
+        "prompt_sha256": null,
+        "note": "记录里 asset_id 字段存在但为 null"
+      },
+      "adoption": {
+        "shot_id": "S04_004",
+        "slot": "f01",
+        "by": "user",
+        "at": "2026-11-15",
+        "evidence": "09_EDITING/MANUAL_SELECTION_20261115_2203/USER_SELECTION_ORIGINAL.json#S04_004:f01"
+      },
+      "stale_root": true,
+      "notes": "依赖的是旧 CHAR_001 定稿；身份根 CHAR_001.IDENTITY_ROOT.1950 更新后未重出该帧（本帧脸偏宽/偏厚的已知根因之一）。"
+    },
+    {
+      "asset_id": "VID.S03_001-0.2K",
+      "family": "video",
+      "role": "approved_take",
+      "file": "07_SHOT_GENERATION/REGEN_2K_V03_20261116/BATCH_B/S03_001-0/2026-11-16_00-52-54-regeneration.mp4",
+      "sha256": "75453419cd7d86385d1616df129b501318f0d7ad42dc882419f53ae2a1c34628",
+      "bytes": 9424387,
+      "width": 2560,
+      "height": 1440,
+      "duration_sec": 10.125,
+      "approval": {
+        "state": "ADOPTED",
+        "by": "director",
+        "at": "2026-11-16",
+        "evidence": "docs/video/REGEN_2K_V03_20261116/BATCH_B/ORDERS.json#S03_001-0"
+      },
+      "scope": {
+        "shots": [
+          "S03_001"
+        ],
+        "valid_for": [
+          "manifest_segment"
+        ]
+      },
+      "root": "KF.S03_001.f01",
+      "dependencies": [
+        {
+          "asset_id": "KF.S03_001.f01",
+          "sha256": "2627cdfa35f153cee9df55ff7bd3c731950940f4e07eaee8beffbb7361f36189",
+          "role": "first_frame"
+        }
+      ],
+      "provenance": {
+        "record": "docs/video/REGEN_2K_V03_20261116/BATCH_B/ORDERS.json#S03_001-0",
+        "model": "MiniMax-H3 (2K regen endpoint)",
+        "task_id": "463818407891488",
+        "prompt_sha256": "db2918c16f52e034ab9330b6a067bb92c0cfb6d635e7b74208048f4f9b89c44e"
+      },
+      "notes": "first_frame 指向文件名含 REJECTED 的关键帧；用户 2026-11-15 选片确认该图，adoption 覆盖旧 rejection 状态。"
+    },
+    {
+      "asset_id": "FINAL.v05.2K",
+      "family": "final",
+      "role": "final_render",
+      "file": "12_FINAL/MOTION_v05/探路_全片字幕与字卡修订_v05_2K.mp4",
+      "sha256": "f69c8f6098cf15b2b373c81baff31bf623583a0f5b509c299b3185ec85276205",
+      "bytes": 1069518035,
+      "width": 2560,
+      "height": 1440,
+      "duration_sec": 570,
+      "approval": {
+        "state": "APPROVED",
+        "by": "user",
+        "at": "2026-11-16",
+        "evidence": "12_FINAL/MOTION_v05/DELIVERY_MANIFEST.json#user_acceptance"
+      },
+      "scope": {
+        "valid_for": [
+          "delivery"
+        ]
+      },
+      "root": null,
+      "dependencies": [],
+      "provenance": {
+        "record": "12_FINAL/MOTION_v05/DELIVERY_MANIFEST.json",
+        "note": "570s/13680帧/91画面段/100字幕/12信息卡；AAC −18.46 LUFS/−2.07 dBTP"
+      },
+      "qa": {
+        "full_av_decode_exit": 0,
+        "evidence": "docs/review/MOTION_v05_FINAL/VERIFY.json",
+        "customer_review": "PENDING_TEACHER_FEEDBACK"
+      }
+    }
+  ],
+  "shot_plan": [
+    {
+      "shot_id": "S03_001",
+      "slot": "f01",
+      "duration_sec": 7.625,
+      "keyframe": {
+        "asset_id": "KF.S03_001.f01",
+        "sha256": "2627cdfa35f153cee9df55ff7bd3c731950940f4e07eaee8beffbb7361f36189",
+        "approval_state": "ADOPTED",
+        "adoption": {
+          "by": "user",
+          "at": "2026-11-15",
+          "evidence": "09_EDITING/MANUAL_SELECTION_20261115_2203/USER_SELECTION_ORIGINAL.json#S03_001:f01"
+        }
+      },
+      "video": {
+        "asset_id": "VID.S03_001-0.2K",
+        "sha256": "75453419cd7d86385d1616df129b501318f0d7ad42dc882419f53ae2a1c34628",
+        "mode": "first_frame",
+        "in_sec": 1.25,
+        "task_id": "463818407891488",
+        "order_record": "docs/video/REGEN_2K_V03_20261116/BATCH_B/ORDERS.json#S03_001-0"
+      },
+      "covers": [
+        "S03_001#0"
+      ],
+      "manifest_ref": "09_EDITING/MOTION_v05/manifest_motion_v05.json#shots[S03_001]"
+    }
+  ],
+  "local_qa_evidence": [
+    {
+      "check_id": "SPEC_PROBE",
+      "tool": "ffprobe",
+      "scope": "file",
+      "level": "L1",
+      "proves": [
+        "2560x1440/24fps/13680帧/570.000s/AAC 48kHz stereo"
+      ],
+      "does_not_prove": [
+        "画面内容",
+        "听感"
+      ],
+      "cost_sec": "<1",
+      "evidence": {
+        "result": "pass",
+        "artifacts": [
+          "本次审计实跑（REPORT.md §1）"
+        ]
+      }
+    },
+    {
+      "check_id": "FULL_AV_DECODE",
+      "tool": "ffmpeg -xerror -f null",
+      "scope": "file",
+      "level": "L1",
+      "proves": [
+        "容器/流可完整解码"
+      ],
+      "does_not_prove": [
+        "内容正确",
+        "动作自然"
+      ],
+      "cost_sec": "30–60s/570s 2K",
+      "evidence": {
+        "result": "exit=0",
+        "artifacts": [
+          "docs/review/MOTION_v05_FINAL/full_decode.log",
+          "docs/review/MOTION_v05_FINAL/VERIFY.json"
+        ]
+      }
+    },
+    {
+      "check_id": "ASR_WORD_TIMES",
+      "tool": "docs/review/MOTION_v04_ASR/tools/run_asr_blind.py",
+      "scope": "segment",
+      "level": "L2",
+      "proves": [
+        "S01_004 音频含『白霜是渗水带出来的钙』(ASR:…的盖)，4.79–6.39s 波形实测"
+      ],
+      "does_not_prove": [
+        "口型",
+        "表演",
+        "字幕断句"
+      ],
+      "cost_sec": "十几秒/片段",
+      "evidence": {
+        "result": "hit",
+        "artifacts": [
+          "docs/review/MOTION_v04_ASR/README.md"
+        ]
+      }
+    },
+    {
+      "check_id": "SCENE_REF_LINT",
+      "tool": "tools/check_scene_refs.py",
+      "scope": "file",
+      "level": "L1",
+      "proves": [
+        "derivations 清单的 refs 存在且含 TIANQUAN 母版 sha"
+      ],
+      "does_not_prove": [
+        "母版获批",
+        "服务收到图",
+        "几何正确"
+      ],
+      "cost_sec": "<1",
+      "evidence": {
+        "result": "PASS",
+        "artifacts": [
+          "本次审计实跑（REPORT.md §1）"
+        ]
+      }
+    },
+    {
+      "check_id": "HUMAN_REVIEW",
+      "tool": "user / teacher",
+      "scope": "full",
+      "level": "L4/L5",
+      "proves": [
+        "用户 2026-11-16 验收 v05"
+      ],
+      "does_not_prove": [],
+      "cost_sec": null,
+      "evidence": {
+        "result": "user_accepted",
+        "teacher_review": "NOT_YET",
+        "artifacts": [
+          "12_FINAL/MOTION_v05/DELIVERY_MANIFEST.json#user_acceptance"
+        ]
+      }
+    }
+  ],
+  "reuse_report": {
+    "measured_at": "2026-11-16",
+    "source": "07_SHOT_GENERATION/ANIMATIC_v01/**/*.json (90 records, 226 refs, 68 unique assets)",
+    "refs_by_root": {
+      "LOC.BOXGIRDER.MASTER.v01": 17,
+      "LOC.TIANQUAN.MASTER.M1": 17,
+      "PROP_002.ANIMATIC_MASTER": 12,
+      "CHAR_004_DESIGN_FINAL_v01.jpg": 11,
+      "CHAR_005_DESIGN_FINAL_v01.jpg": 11,
+      "CHAR_003_DESIGN_FINAL_v01.jpg": 10,
+      "CHAR_001_DESIGN_FINAL_v01.jpg": 9,
+      "CHAR_001_DESIGN_C_FINAL_v01.jpg": 4,
+      "CHAR_001.MASTER.1938 (raw文件)": 2,
+      "CHAR_001.IDENTITY_ROOT.1950": 0
+    },
+    "approved_unused": [],
+    "cross_scope_reuse": [
+      {
+        "sha256": "98263339a6…",
+        "used_by": [
+          "S06_004-2a",
+          "S06_004-2b"
+        ],
+        "issue": "2b 的 prompt 写教授+橙背心，与周原单人图矛盾（task-8 报告已定位 478s 角色错配）"
+      }
+    ],
+    "status_adoption_conflicts": [
+      {
+        "asset": "S03_001_IN_A1_REJECTED_gaze-at-camera.png",
+        "record_status": "REJECTED_NOT_DELIVERED",
+        "adoption": "user_selected",
+        "resolution": "adoption 优先；文件名/旧状态不得用于过滤"
+      }
+    ],
+    "approved_but_not_in_measured_scope": [
+      {
+        "asset_id": "CHAR_001.IDENTITY_ROOT.1950",
+        "note": "0 refs in 90 ANIMATIC_v01 records (89 predate root content); v04 repair provenance missing"
+      }
+    ],
+    "sidecar_artifact_note": {
+      "family": "SCENES_4K/ENV",
+      "records": 28,
+      "recorded_sha_matches_png_originals": 28,
+      "delivered_jpg_hash_recorded": false,
+      "interpretation": "sidecar describes the downloaded PNG artifact; delivered JPEG is a converted copy; conversion script unrecorded. Verify by recomputing the delivered file hash and recording both."
+    }
+  }
+}

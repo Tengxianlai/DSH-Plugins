@@ -9,12 +9,18 @@
  * go through /images/edits (edit, combine, keep a subject consistent). Files are
  * saved next to the session and only their paths enter the context.
  *
+ * Every call also writes a redacted generation receipt: the final prompt, the
+ * model and size plan, the real reference list with sha256/dimensions, the
+ * output hashes and the cost as an explicit estimate. The receipt is written
+ * before the paid request, so a killed process still leaves the inputs on disk.
+ * `dry_run` produces the same plan and receipt without any request or key use.
+ *
  * Dependencies are Node built-ins only, so the module can be mounted by file
  * URL without installing a package.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { extname, join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import {
   ASPECTS,
@@ -32,9 +38,34 @@ import {
   validatePrompt,
   validateQuality,
 } from './lib/catalog.js'
+import {
+  APPROVAL_POLICY,
+  IDENTITY_ROOT_ROLES,
+  REFERENCE_ROLES,
+  collectReferences,
+  evaluateIdentityGuard,
+  referenceKey,
+  reuseWarnings,
+} from './lib/guard.js'
+import { imageInfoOf, mimeOf } from './lib/imageinfo.js'
+import {
+  makeReceipt,
+  makeReceiptId,
+  receiptDirFor,
+  redactText,
+  redactUrl,
+  sha256Hex,
+  writeFileExclusive,
+  writeReceipt,
+} from './lib/receipt.js'
 
 export const name = 'image-gen'
 export const inject = ['tools', 'workingDirectory', 'credentials']
+
+/** Per-reference upload cap (matches the documented MiniMax reference limit). */
+const MAX_REFERENCE_BYTES = 64 * 1024 * 1024
+/** Downloaded result cap: a 4K PNG stays well under this. */
+const MAX_OUTPUT_BYTES = 128 * 1024 * 1024
 
 /**
  * DSH home for the dotenv key fallback.
@@ -61,6 +92,8 @@ const DEFAULT_CONFIG = {
   minimaxKeyFile: undefined,
   minimaxDefaultModel: 'MiniMax-H3-Image',
 }
+
+const isHttp = (value) => /^https?:\/\//i.test(value)
 
 /** Read one key from a dotenv-style file, ignoring comments and blank values. */
 function readDotenv(file, key) {
@@ -92,31 +125,45 @@ async function resolveKey(ctx, backend) {
   throw new Error(`${backend.keyRef} is not available: set it in the credentials store or in ${backend.keyFile}`)
 }
 
-/** Load one reference image as a Blob for a multipart edit request. */
-async function loadImage(cwd, input, signal) {
-  if (/^https?:\/\//i.test(input)) {
-    const response = await fetch(input, { signal })
-    if (!response.ok) throw new Error(`cannot read reference image ${input}: HTTP ${response.status}`)
-    const type = response.headers.get('content-type') ?? 'image/png'
-    return new Blob([await response.arrayBuffer()], { type })
+/**
+ * Read a remote body with a hard byte cap. Content-Length is checked first so a
+ * declared-oversized file is refused unread; a stream without Content-Length is
+ * aborted as soon as the running total passes the cap instead of being buffered
+ * to the end first.
+ */
+async function readBounded(response, limit, label) {
+  const declared = response.headers.get('content-length')
+  if (declared !== null) {
+    const expected = Number(declared)
+    if (Number.isFinite(expected) && expected > limit) {
+      throw new Error(`${label} is ${expected} bytes, over the ${limit}-byte limit`)
+    }
   }
-  const path = input.startsWith('/') ? input : resolve(cwd, input)
-  let bytes
+  if (response.body === null || typeof response.body.getReader !== 'function') {
+    const bytes = Buffer.from(await response.arrayBuffer())
+    if (bytes.length > limit) {
+      throw new Error(`${label} is ${bytes.length} bytes, over the ${limit}-byte limit`)
+    }
+    return bytes
+  }
+  const reader = response.body.getReader()
+  const chunks = []
+  let total = 0
   try {
-    bytes = readFileSync(path)
-  } catch (error) {
-    throw new Error(`cannot read reference image ${input}: ${error.message}`)
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      total += value.byteLength
+      if (total > limit) {
+        await reader.cancel().catch(() => {})
+        throw new Error(`${label} exceeded the ${limit}-byte limit while streaming; aborted before buffering it all`)
+      }
+      chunks.push(Buffer.from(value))
+    }
+  } finally {
+    reader.releaseLock?.()
   }
-  const ext = extname(path.split(/[?#]/)[0]).toLowerCase()
-  const type =
-    ext === '.jpg' || ext === '.jpeg'
-      ? 'image/jpeg'
-      : ext === '.webp'
-        ? 'image/webp'
-        : ext === '.heic' || ext === '.heif'
-          ? 'image/heic'
-          : 'image/png'
-  return new Blob([bytes], { type })
+  return Buffer.concat(chunks, total)
 }
 
 function slugOf(text) {
@@ -133,24 +180,108 @@ function timestamp() {
   return new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19)
 }
 
+function extensionFor(format) {
+  return format === 'jpeg' ? 'jpg' : (format ?? 'bin')
+}
+
 /**
- * Sniff the delivered bytes. TeamoRouter's GPT 2.6 path returns PNG even when
- * `output_format: jpeg` is requested, so the file extension must follow the
- * bytes, not the request.
+ * Load every reference once: hash it, record its real format and dimensions,
+ * keep a local copy of remote bytes and build the blob for the multipart edit.
+ *
+ * Nothing is sent before this completes, which is what lets the receipt be
+ * written with the true input list before the paid request.
  */
-function imageFormatOf(bytes) {
-  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-    return 'png'
+async function loadReferenceInputs({ images, cwd, annotations, dryRun, signal, copyDir }) {
+  const loaded = []
+  const records = []
+  const warnings = []
+
+  for (const [index, image] of images.entries()) {
+    const key = referenceKey(image, cwd, resolve)
+    const meta = annotations.get(key)
+    const record = {
+      image: isHttp(image) ? redactUrl(image) : image,
+      source_type: isHttp(image) ? 'url' : 'file',
+      checked: false,
+      sha256: null,
+      sha256_expected: meta?.expectedSha256 ?? null,
+      sha256_match: null,
+      bytes: null,
+      format: null,
+      width: null,
+      height: null,
+      role: meta?.role ?? 'unspecified',
+      approved: meta === undefined ? null : meta.approved,
+      approval: meta === undefined ? null : meta.approved ? 'caller_declared' : 'unapproved',
+      approval_evidence: meta?.approvalEvidence === undefined ? null : redactText(meta.approvalEvidence),
+      source: meta?.source === undefined ? null : redactText(meta.source),
+      note: meta?.note === undefined ? null : redactText(meta.note),
+      asset_id: meta?.assetId ?? null,
+      required: meta === undefined ? null : meta.required === true,
+      root_ids: meta?.rootIds ?? null,
+    }
+
+    let bytes
+    if (isHttp(image)) {
+      if (dryRun) {
+        records.push(record)
+        warnings.push(
+          `remote reference ${redactUrl(image)} was not fetched during dry_run; its sha256/dimensions are ` +
+            'verified only on a real call',
+        )
+        continue
+      }
+      const response = await fetch(image, { signal })
+      if (!response.ok) {
+        throw new Error(`cannot read reference image ${redactUrl(image)}: HTTP ${response.status}`)
+      }
+      bytes = await readBounded(response, MAX_REFERENCE_BYTES, `reference image ${redactUrl(image)}`)
+    } else {
+      const path = resolve(cwd, image)
+      try {
+        bytes = readFileSync(path)
+      } catch (error) {
+        throw new Error(`cannot read reference image ${image}: ${error.message}`)
+      }
+      if (bytes.length > MAX_REFERENCE_BYTES) {
+        throw new Error(`reference image ${image} is ${bytes.length} bytes, over the ${MAX_REFERENCE_BYTES}-byte limit`)
+      }
+      record.resolved = path
+    }
+
+    const info = imageInfoOf(bytes)
+    record.checked = true
+    record.sha256 = sha256Hex(bytes)
+    record.bytes = info.bytes
+    record.format = info.format
+    record.width = info.width
+    record.height = info.height
+
+    if (record.sha256_expected !== null) {
+      record.sha256_match = record.sha256_expected === record.sha256
+      if (!record.sha256_match) {
+        throw new Error(
+          `reference hash mismatch for ${image}${record.required === true ? ' (required by references_file)' : ''}: ` +
+            `references_file declares sha256 ${record.sha256_expected}, actual bytes hash ${record.sha256}. ` +
+            'The asset changed or the wrong file was passed; refusing before any request.',
+        )
+      }
+    }
+
+    if (isHttp(image) && copyDir !== undefined) {
+      const localCopy = join(copyDir, `ref-${index + 1}.${extensionFor(info.format)}`)
+      mkdirSync(dirname(localCopy), { recursive: true })
+      writeFileExclusive(localCopy, bytes)
+      record.local_copy = localCopy
+    }
+
+    if (!dryRun) {
+      loaded.push({ blob: new Blob([bytes], { type: mimeOf(info.format) }), name: `ref-${index + 1}.${extensionFor(info.format)}` })
+    }
+    records.push(record)
   }
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpeg'
-  if (
-    bytes.length >= 12 &&
-    bytes.toString('ascii', 0, 4) === 'RIFF' &&
-    bytes.toString('ascii', 8, 12) === 'WEBP'
-  ) {
-    return 'webp'
-  }
-  return undefined
+
+  return { loaded, records, warnings }
 }
 
 /** JSON body for text-to-image. */
@@ -180,7 +311,7 @@ function generationBody(plan, prompt) {
 }
 
 /** Multipart form for image editing; reference files use repeated `image` fields. */
-async function editForm(plan, prompt, images, cwd, signal) {
+function editForm(plan, prompt, loaded) {
   const form = new FormData()
   form.append('model', plan.model)
   form.append('prompt', prompt)
@@ -202,9 +333,8 @@ async function editForm(plan, prompt, images, cwd, signal) {
   }
   // MiniMax reads repeated `image` fields and keeps their order as Picture 1..N;
   // TeamoRouter uses the same shape for GPT edits (verified 2026-11-13/14).
-  for (const [index, input] of images.entries()) {
-    const blob = await loadImage(cwd, input, signal)
-    form.append('image', blob, `image-${index}${extname(input.split(/[?#]/)[0]) || '.png'}`)
+  for (const input of loaded) {
+    form.append('image', input.blob, input.name)
   }
   return form
 }
@@ -213,11 +343,209 @@ async function editForm(plan, prompt, images, cwd, signal) {
 async function itemBytes(item, signal) {
   if (typeof item.b64_json === 'string') return Buffer.from(item.b64_json, 'base64')
   if (typeof item.url === 'string') {
+    // The signed download URL is deliberately not persisted anywhere.
     const download = await fetch(item.url, { signal })
     if (!download.ok) throw new Error(`image URL answered HTTP ${download.status}`)
-    return Buffer.from(await download.arrayBuffer())
+    return readBounded(download, MAX_OUTPUT_BYTES, 'generated image download')
   }
   return undefined
+}
+
+/** One estimate object shared by dry_run and real receipts. */
+function costRecord({ cny, unitCny, known, basis, note }) {
+  return {
+    currency: 'CNY',
+    cny: cny ?? null,
+    unit_cny: unitCny ?? null,
+    known,
+    estimated: true,
+    bill: false,
+    basis,
+    note: note ?? (known ? 'estimate only, not a bill; the provider invoice is authoritative' : 'cost unknown'),
+  }
+}
+
+/** Pre-request estimate. Token-billed models stay explicitly unknown. */
+function planCost({ provider, entry, sizePlan, n }) {
+  const perImage = provider === 'gpt' && entry.pricing.mode === 'per_image'
+  const unit = perImage ? costCnyFor(entry, sizePlan.billingTier) : undefined
+  if (unit === undefined) {
+    return costRecord({
+      known: false,
+      basis: `${provider === 'minimax' || entry.pricing.mode === 'token' ? 'token-billed' : 'price unknown'}: ` +
+        'prompt/reference/output tokens decide the amount',
+      note: 'cost unknown: this model is not per-image priced here, so no CNY amount is fabricated',
+    })
+  }
+  return costRecord({
+    cny: Number((unit * n).toFixed(2)),
+    unitCny: unit,
+    known: true,
+    basis: `per delivered image tier ${sizePlan.billingTier} × n=${n}`,
+  })
+}
+
+/** Post-delivery estimate: sums the tier of each delivered image. */
+function deliveredCost({ provider, entry, billedTiers }) {
+  const perImage = provider === 'gpt' && entry.pricing.mode === 'per_image'
+  const units = perImage ? billedTiers.map((tier) => costCnyFor(entry, tier)) : []
+  const known = units.length > 0 && units.every((value) => value !== undefined)
+  if (!known) {
+    return costRecord({
+      known: false,
+      basis: `${provider === 'minimax' || entry.pricing.mode === 'token' ? 'token-billed' : 'price unknown'}: ` +
+        'the delivered amount depends on tokens and prompt enhancement',
+      note: 'cost unknown: this model is not per-image priced here, so no CNY amount is fabricated',
+    })
+  }
+  const total = Number(units.reduce((sum, value) => sum + value, 0).toFixed(2))
+  return costRecord({
+    cny: total,
+    unitCny: units.length === 1 ? units[0] : null,
+    known: true,
+    basis: `per delivered image; tiers ${billedTiers.join(', ')}`,
+  })
+}
+
+/** The receipt `request` block; also the source for the model-facing plan. */
+function requestRecord({
+  provider,
+  model,
+  endpoint,
+  prompt,
+  n,
+  format,
+  quality,
+  aspect,
+  sizeRequested,
+  sizePlan,
+  allow4k,
+  referenceCount,
+  dryRun,
+}) {
+  return {
+    provider,
+    model,
+    endpoint,
+    prompt,
+    prompt_sha256: sha256Hex(prompt),
+    prompt_chars: prompt.length,
+    n,
+    format_requested: format,
+    quality: quality ?? null,
+    aspect,
+    size_requested: sizeRequested ?? null,
+    planned_size: sizePlan.size ?? null,
+    planned_area: sizePlan.area ?? null,
+    billing_tier: sizePlan.billingTier ?? null,
+    allow_4k: allow4k === true,
+    reference_count: referenceCount,
+    dry_run: dryRun,
+  }
+}
+
+/** The plan surfaced to the caller (prompt text itself stays in the receipt). */
+function planView(request) {
+  return {
+    provider: request.provider,
+    model: request.model,
+    endpoint: request.endpoint,
+    planned_size: request.planned_size,
+    planned_area: request.planned_area,
+    billing_tier: request.billing_tier,
+    aspect: request.aspect,
+    n: request.n,
+    format_requested: request.format_requested,
+    quality: request.quality,
+    prompt_chars: request.prompt_chars,
+    prompt_sha256: request.prompt_sha256,
+    reference_count: request.reference_count,
+    allow_4k: request.allow_4k,
+  }
+}
+
+const NULLABLE_STRING = { oneOf: [{ type: 'string' }, { type: 'null' }] }
+const NULLABLE_INTEGER = { oneOf: [{ type: 'integer' }, { type: 'null' }] }
+const NULLABLE_BOOLEAN = { oneOf: [{ type: 'boolean' }, { type: 'null' }] }
+
+const INPUT_RECORD_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    image: { type: 'string', required: true },
+    resolved: { type: 'string' },
+    source_type: { type: 'string', required: true },
+    checked: { type: 'boolean', required: true },
+    sha256: NULLABLE_STRING,
+    sha256_expected: NULLABLE_STRING,
+    sha256_match: NULLABLE_BOOLEAN,
+    bytes: NULLABLE_INTEGER,
+    format: NULLABLE_STRING,
+    width: NULLABLE_INTEGER,
+    height: NULLABLE_INTEGER,
+    local_copy: { type: 'string' },
+    role: { type: 'string', required: true },
+    approved: NULLABLE_BOOLEAN,
+    approval: NULLABLE_STRING,
+    approval_evidence: NULLABLE_STRING,
+    source: NULLABLE_STRING,
+    note: NULLABLE_STRING,
+    asset_id: NULLABLE_STRING,
+    required: NULLABLE_BOOLEAN,
+    root_ids: { oneOf: [{ type: 'array', items: { type: 'string' } }, { type: 'null' }] },
+  },
+}
+
+const OUTPUT_RECORD_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    index: { type: 'integer', required: true },
+    file: { type: 'string', required: true },
+    sha256: { type: 'string', required: true },
+    bytes: { type: 'integer', required: true },
+    format: { type: 'string', required: true },
+    width: NULLABLE_INTEGER,
+    height: NULLABLE_INTEGER,
+    size: NULLABLE_STRING,
+    billing_tier: NULLABLE_STRING,
+  },
+}
+
+const COST_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    currency: { type: 'string', required: true },
+    cny: { oneOf: [{ type: 'number' }, { type: 'null' }], required: true },
+    unit_cny: { oneOf: [{ type: 'number' }, { type: 'null' }] },
+    known: { type: 'boolean', required: true },
+    estimated: { type: 'boolean', required: true },
+    bill: { type: 'boolean', required: true },
+    basis: { type: 'string' },
+    note: { type: 'string' },
+  },
+}
+
+const PLAN_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    provider: { type: 'string', required: true },
+    model: { type: 'string', required: true },
+    endpoint: { type: 'string', required: true },
+    planned_size: NULLABLE_STRING,
+    planned_area: NULLABLE_STRING,
+    billing_tier: NULLABLE_STRING,
+    aspect: { type: 'string', required: true },
+    n: { type: 'integer', required: true },
+    format_requested: { type: 'string', required: true },
+    quality: NULLABLE_STRING,
+    prompt_chars: { type: 'integer', required: true },
+    prompt_sha256: { type: 'string', required: true },
+    reference_count: { type: 'integer', required: true },
+    allow_4k: { type: 'boolean', required: true },
+  },
 }
 
 export function apply(ctx, config) {
@@ -268,8 +596,14 @@ export function apply(ctx, config) {
       '2560x1440 is billed as 4K, so never pass it for 2K. Prefer size:"2k" + aspect over ' +
       'computing pixels. Without `images` it draws from the prompt; with `images` (local paths ' +
       'or URLs, up to 16) it edits or combines them, and passing the same reference each time ' +
-      'keeps a subject consistent. MiniMax is the cheaper 4K path. Saves files, returns their ' +
-      'paths and an estimated CNY cost; call image_models for the full table.',
+      'keeps a subject consistent. Every call writes a receipt with the real input list ' +
+      '(sha256/dimensions/role/approval), output hashes and an estimate marked as not a bill; ' +
+      'use dry_run to inspect the plan and inputs before paying. For an existing person, pass the ' +
+      'approved identity root directly — do not try to fix an approved face with opposite ' +
+      'adjectives; declare references so the receipt proves what anchored the result. A ' +
+      'references_file entry marked required:true must be passed and hash-matched or the call is ' +
+      'refused before spending. ' +
+      'Saves files, returns their paths; call image_models for the full table.',
     timeoutMs: 900_000,
     parameters: {
       prompt: {
@@ -296,6 +630,50 @@ export function apply(ctx, config) {
         items: { type: 'string' },
         description:
           'Reference or source images: local paths or http(s) URLs. One image edits it; several combine them (a subject from each). Up to 16; omit for text-to-image.',
+      },
+      references: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            image: { type: 'string', required: true },
+            role: { type: 'string', enum: [...REFERENCE_ROLES], required: true },
+            approved: { type: 'boolean' },
+            source: { type: 'string' },
+            note: { type: 'string' },
+          },
+        },
+        description:
+          'Provenance for entries of `images`, matched by path/URL (relative paths allowed): role is ' +
+          'identity_root/character_card/scene_card/keyframe/source_frame/style_ref/other; approved is ' +
+          'caller-declared and recorded as such; source names the approval record. Declaring an approved ' +
+          'identity_root/character_card is how an edit of an existing person is allowed; approved cards are ' +
+          'also what keeps approved assets from being replaced by video frames. Required metadata is optional ' +
+          'for plain calls but makes the receipt auditable.',
+      },
+      references_file: {
+        type: 'string',
+        description:
+          'Optional JSON manifest (relative path) of project assets: an array, {references:[...]} or ' +
+          '{assets:[...]} with entries {image|path, role|kind, approved, required, source, note, sha256, id, ' +
+          'approval_evidence, root_ids}. Only entries matching `images` are used; its path+sha256 are pinned in ' +
+          'the receipt. An entry marked `required:true` MUST be passed in `images` and its sha256 must match the ' +
+          'actual bytes, otherwise the call is refused before any credential or network use; a missing or drifted ' +
+          'required reference cannot be replaced by a frame, another asset or a text-only retry. Approved ' +
+          'assets not marked required stay optional (informational warning only).',
+      },
+      dry_run: {
+        type: 'boolean',
+        description:
+          'Default false. Validate, resolve, price and hash the local inputs without any network request or ' +
+          'credential use, write a plan receipt, and return the plan/inputs/cost. Remote references are listed ' +
+          'but not fetched. Cost is always estimated and marked bill:false; token-billed or unknown prices ' +
+          'return cost.known:false with cny:null instead of a fabricated amount.',
+      },
+      label: {
+        type: 'string',
+        description: 'Free-form label recorded in the receipt (for example a shot or scene id).',
       },
       size: {
         type: 'string',
@@ -337,7 +715,8 @@ export function apply(ctx, config) {
       },
       out_dir: {
         type: 'string',
-        description: 'Directory for the saved files, relative to the session working directory. Default generated-images.',
+        description:
+          'Directory for the saved files, relative to the session working directory. Default generated-images. Receipts go to <out_dir>/receipts.',
       },
     },
     output: {
@@ -353,7 +732,15 @@ export function apply(ctx, config) {
           provider: { type: 'string', required: true },
           size: { type: 'string', required: true },
           model: { type: 'string', required: true },
-          format: { type: 'string' },
+          format: { type: 'string', required: true },
+          dry_run: { type: 'boolean', required: true },
+          receipt_path: { type: 'string', required: true },
+          receipt_id: { type: 'string', required: true },
+          inputs: { type: 'array', items: INPUT_RECORD_SCHEMA, required: true },
+          outputs: { type: 'array', items: OUTPUT_RECORD_SCHEMA, required: true },
+          cost: { ...COST_SCHEMA, required: true },
+          plan: { ...PLAN_SCHEMA, required: true },
+          warnings: { type: 'array', items: { type: 'string' }, required: true },
           billing_tier: { type: 'string' },
           cost_cny: { type: 'number' },
           quality: { type: 'string' },
@@ -365,13 +752,35 @@ export function apply(ctx, config) {
         },
       },
       render: (_args, value) => {
+        const cost = value.cost
+        const costText =
+          cost === undefined
+            ? ''
+            : cost.known
+              ? `≈¥${Number(cost.cny).toFixed(2)} estimate, not a bill`
+              : 'cost unknown (token-billed; the provider bill is authoritative)'
         const tier =
           value.billing_tier === undefined
             ? ''
-            : `${value.provider === 'minimax' ? 'area' : 'billed as'} ${value.billing_tier}`
-        const cost = value.cost_cny === undefined ? '' : `≈¥${value.cost_cny.toFixed(2)}`
-        const detail = [tier, cost].filter((part) => part.length > 0).join(', ')
-        const billed = detail.length === 0 ? '' : ` (${detail})`
+            : ` [${value.provider === 'minimax' ? 'area' : 'billed as'} ${value.billing_tier}]`
+        const warnings = value.warnings ?? []
+        const warningText =
+          warnings.length === 0
+            ? ''
+            : `; ${warnings.length} warning(s): ${warnings.slice(0, 3).join(' | ')}${warnings.length > 3 ? ' …' : ''}`
+        if (value.dry_run === true) {
+          const plan = value.plan ?? {}
+          const plannedSize = plan.planned_size ?? plan.planned_area ?? value.size
+          return [
+            {
+              type: 'text',
+              text:
+                `Dry run: no request, no charge. ${plan.provider ?? value.provider} ${plan.model ?? value.model} at ` +
+                `${plannedSize}, ${plan.reference_count ?? value.inputs.length} reference(s), ${costText}. ` +
+                `Receipt: ${value.receipt_path}${warningText}`,
+            },
+          ]
+        }
         const failed =
           value.failed === undefined || value.failed.length === 0
             ? ''
@@ -379,7 +788,9 @@ export function apply(ctx, config) {
         return [
           {
             type: 'text',
-            text: `Saved ${value.files.length} image(s) at ${value.size}${billed} with ${value.model} via ${value.provider}: ${value.files.join(', ')}${failed}`,
+            text:
+              `Saved ${value.files.length} image(s) at ${value.size} (${value.format}) with ${value.model} via ` +
+              `${value.provider}${tier}; ${costText}. Receipt: ${value.receipt_path}${failed}${warningText}`,
           },
         ]
       },
@@ -405,144 +816,284 @@ export function apply(ctx, config) {
       const images = args.images ?? []
       validateCounts(provider, n, images.length)
       const format = args.format ?? 'png'
+      const aspect = args.aspect ?? '1:1'
       const sizePlan = planBilledSize({
         provider,
         entry,
         size: args.size,
-        aspect: args.aspect ?? '1:1',
+        aspect,
         allow4k: args.allow_4k === true,
       })
-      const plan = { provider, model, n, format, quality, ...sizePlan }
+      const requestPlan = { provider, model, n, format, quality, aspect, ...sizePlan }
+      const endpoint = images.length > 0 ? '/images/edits' : '/images/generations'
+      const dryRun = args.dry_run === true
+      const outDir = args.out_dir === undefined ? join(cwd, 'generated-images') : resolve(cwd, args.out_dir)
+      const receiptId = makeReceiptId()
+      const receiptPath = join(receiptDirFor(outDir), `${receiptId}.json`)
 
-      const key = await resolveKey(ctx, backend)
-      const baseURL = backend.baseURL.replace(/\/$/, '')
-      const apiLabel = profile.apiLabel
+      // Provenance and guard run before anything is sent. A refused identity
+      // edit costs nothing, not even a credential lookup.
+      const collected = collectReferences({
+        images,
+        cwd,
+        references: args.references,
+        referencesFile: typeof args.references_file === 'string' && args.references_file.trim().length === 0
+          ? undefined
+          : args.references_file,
+        readFileSync,
+        resolve,
+        sha256Hex,
+        redactUrl,
+      })
+      const warnings = [...collected.warnings]
+      const guard = evaluateIdentityGuard({
+        prompt: args.prompt,
+        images,
+        annotations: collected.annotations,
+        manifest: collected.manifest,
+        redactUrl,
+      })
+      warnings.push(...guard.warnings)
+      warnings.push(
+        ...reuseWarnings({ images, annotations: collected.annotations, manifest: collected.manifest, redactUrl }),
+      )
 
-      let response
+      const loadedInputs = await loadReferenceInputs({
+        images,
+        cwd,
+        annotations: collected.annotations,
+        dryRun,
+        signal: exec.signal,
+        copyDir: dryRun ? undefined : join(receiptDirFor(outDir), 'inputs', receiptId),
+      })
+      warnings.push(...loadedInputs.warnings)
+
+      const request = requestRecord({
+        provider,
+        model,
+        endpoint,
+        prompt: args.prompt,
+        n,
+        format,
+        quality,
+        aspect,
+        sizeRequested: args.size,
+        sizePlan,
+        allow4k: args.allow_4k,
+        referenceCount: images.length,
+        dryRun,
+      })
+      const plan = planView(request)
+      const plannedCost = planCost({ provider, entry, sizePlan, n })
+      const receipt = makeReceipt({
+        id: receiptId,
+        label: args.label,
+        manifest: collected.manifest,
+        request,
+        inputs: loadedInputs.records,
+        cost: plannedCost,
+        warnings,
+      })
+      receipt.approval_policy = APPROVAL_POLICY
+      receipt.guard = {
+        identity_edit_prompt: guard.identityEditPrompt === true,
+        identity_preservation_prompt: guard.identityPreservationPrompt === true,
+        approved_identity_references: [...collected.annotations.values()].filter(
+          (annotation) => annotation.approved === true && IDENTITY_ROOT_ROLES.includes(annotation.role),
+        ).length,
+      }
+
+      if (dryRun) {
+        receipt.status = 'planned'
+        writeReceipt(receiptPath, receipt, { create: true })
+        return {
+          files: [],
+          provider,
+          size: sizePlan.size ?? sizePlan.area ?? 'unknown',
+          model,
+          format,
+          dry_run: true,
+          receipt_path: receiptPath,
+          receipt_id: receiptId,
+          inputs: loadedInputs.records,
+          outputs: [],
+          cost: plannedCost,
+          plan,
+          warnings,
+          ...(sizePlan.billingTier === undefined ? {} : { billing_tier: sizePlan.billingTier }),
+          ...(plannedCost.known ? { cost_cny: plannedCost.cny } : {}),
+          ...(quality === undefined ? {} : { quality }),
+        }
+      }
+
+      // Persist the input provenance before the paid request; a killed process
+      // still leaves the exact reference list and hashes on disk.
+      receipt.status = 'requested'
+      writeReceipt(receiptPath, receipt, { create: true })
+
+      const failures = []
+      const outputRecords = []
+      let revisedPrompt
       try {
-        if (images.length > 0) {
-          const form = await editForm(plan, args.prompt, images, cwd, exec.signal)
-          response = await fetch(`${baseURL}/images/edits`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${key}` },
-            body: form,
-            signal: exec.signal,
+        const key = await resolveKey(ctx, backend)
+        const baseURL = backend.baseURL.replace(/\/$/, '')
+        const apiLabel = profile.apiLabel
+
+        let response
+        try {
+          if (images.length > 0) {
+            response = await fetch(`${baseURL}/images/edits`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${key}` },
+              body: editForm(requestPlan, args.prompt, loadedInputs.loaded),
+              signal: exec.signal,
+            })
+          } else {
+            response = await fetch(`${baseURL}/images/generations`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${key}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(generationBody(requestPlan, args.prompt)),
+              signal: exec.signal,
+            })
+          }
+        } catch (error) {
+          if (error?.name === 'AbortError') throw error
+          throw new Error(`${apiLabel} request failed: ${error.message}`)
+        }
+
+        const raw = await response.text()
+        let payload
+        try {
+          payload = JSON.parse(raw)
+        } catch {
+          throw new Error(`${apiLabel} answered HTTP ${response.status}: ${redactText(raw.slice(0, 300))}`)
+        }
+        if (!response.ok) {
+          const message = payload?.error?.message ?? JSON.stringify(payload).slice(0, 300)
+          const itemErrors = Array.isArray(payload?.data)
+            ? payload.data
+                .filter((item) => item?.error !== undefined)
+                .map((item) => `${item.error.code ?? 'error'}: ${item.error.message ?? 'failed'}`)
+                .join('; ')
+            : ''
+          throw new Error(`${apiLabel} ${response.status}: ${message}${itemErrors.length > 0 ? ` (${itemErrors})` : ''}`)
+        }
+
+        const items = Array.isArray(payload.data) ? payload.data : []
+        if (items.length === 0) throw new Error(`${apiLabel} returned no image`)
+
+        mkdirSync(outDir, { recursive: true })
+        const stamp = timestamp()
+        const slug = slugOf(args.prompt)
+        // A same-second retry with the same prompt must never reuse a name: the
+        // receipt id contributes 8 random hex and the write itself is exclusive.
+        const unique = receiptId.slice(-8)
+        const responseFormat = normalizeFormat(payload.output_format) ?? format
+        const billedTiers = []
+        const files = []
+
+        for (const [index, item] of items.entries()) {
+          if (item === null || typeof item !== 'object') {
+            failures.push(`image ${index + 1}: empty result`)
+            continue
+          }
+          if (item.error !== undefined && item.b64_json === undefined && item.url === undefined) {
+            const detail = item.error.message ?? item.error.code ?? 'failed'
+            failures.push(redactText(`image ${index + 1}: ${detail}`))
+            continue
+          }
+          let bytes
+          try {
+            bytes = await itemBytes(item, exec.signal)
+          } catch (error) {
+            failures.push(redactText(`image ${index + 1}: ${error.message}`))
+            continue
+          }
+          if (bytes === undefined) {
+            failures.push(`image ${index + 1}: no b64_json or url`)
+            continue
+          }
+          const info = imageInfoOf(bytes)
+          const actualFormat = info.format ?? responseFormat
+          const file = join(
+            outDir,
+            `${stamp}-${slug}-${unique}${items.length > 1 ? `-${index + 1}` : ''}.${extensionFor(actualFormat)}`,
+          )
+          writeFileExclusive(file, bytes)
+          const deliveredSize = typeof item.size === 'string' ? item.size : undefined
+          const tier =
+            provider === 'gpt' && entry.pricing.mode === 'per_image'
+              ? (billingTierOfSize(deliveredSize) ?? requestPlan.billingTier)
+              : requestPlan.billingTier
+          billedTiers.push(tier)
+          files.push(file)
+          outputRecords.push({
+            index: outputRecords.length + 1,
+            file,
+            sha256: sha256Hex(bytes),
+            bytes: info.bytes,
+            format: actualFormat,
+            width: info.width,
+            height: info.height,
+            size: info.width !== null && info.height !== null ? `${info.width}x${info.height}` : (deliveredSize ?? null),
+            billing_tier: tier ?? null,
           })
-        } else {
-          response = await fetch(`${baseURL}/images/generations`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${key}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(generationBody(plan, args.prompt)),
-            signal: exec.signal,
-          })
+          if (revisedPrompt === undefined && typeof item.revised_prompt === 'string') {
+            revisedPrompt = item.revised_prompt
+          }
+        }
+
+        if (files.length === 0) {
+          throw new Error(`${apiLabel} returned no usable image: ${failures.join('; ') || 'empty result'}`)
+        }
+
+        // Gemini image models are token-billed, so their size tier is not a
+        // billing tier; only report it for per-image GPT models and MiniMax areas.
+        const billingTier =
+          provider === 'gpt' && entry.pricing.mode === 'token' ? undefined : billedTiers[0]
+        const cost = deliveredCost({ provider, entry, billedTiers })
+
+        receipt.status = failures.length === 0 ? 'delivered' : 'partial'
+        receipt.finished_at = new Date().toISOString()
+        receipt.outputs = outputRecords
+        receipt.failures = failures
+        receipt.cost = cost
+        writeReceipt(receiptPath, receipt)
+
+        return {
+          files,
+          provider,
+          size: outputRecords[0]?.size ?? requestPlan.size ?? requestPlan.area ?? 'unknown',
+          model,
+          format: outputRecords[0]?.format ?? format,
+          dry_run: false,
+          receipt_path: receiptPath,
+          receipt_id: receiptId,
+          inputs: loadedInputs.records,
+          outputs: outputRecords,
+          cost,
+          plan,
+          warnings,
+          ...(billingTier === undefined ? {} : { billing_tier: billingTier }),
+          ...(cost.known ? { cost_cny: cost.cny } : {}),
+          ...(quality === undefined ? {} : { quality }),
+          ...(revisedPrompt === undefined ? {} : { revised_prompt: revisedPrompt }),
+          ...(failures.length === 0 ? {} : { failed: failures }),
         }
       } catch (error) {
-        if (error?.name === 'AbortError') throw error
-        throw new Error(`${apiLabel} request failed: ${error.message}`)
-      }
-
-      const raw = await response.text()
-      let payload
-      try {
-        payload = JSON.parse(raw)
-      } catch {
-        throw new Error(`${apiLabel} answered HTTP ${response.status}: ${raw.slice(0, 300)}`)
-      }
-      if (!response.ok) {
-        const message = payload?.error?.message ?? JSON.stringify(payload).slice(0, 300)
-        const itemErrors = Array.isArray(payload?.data)
-          ? payload.data
-              .filter((item) => item?.error !== undefined)
-              .map((item) => `${item.error.code ?? 'error'}: ${item.error.message ?? 'failed'}`)
-              .join('; ')
-          : ''
-        throw new Error(`${apiLabel} ${response.status}: ${message}${itemErrors.length > 0 ? ` (${itemErrors})` : ''}`)
-      }
-
-      const items = Array.isArray(payload.data) ? payload.data : []
-      if (items.length === 0) throw new Error(`${apiLabel} returned no image`)
-
-      const outDir = args.out_dir === undefined ? join(cwd, 'generated-images') : resolve(cwd, args.out_dir)
-      mkdirSync(outDir, { recursive: true })
-      const stamp = timestamp()
-      const slug = slugOf(args.prompt)
-      const responseFormat = normalizeFormat(payload.output_format) ?? format
-      const files = []
-      const failures = []
-      const actualFormats = []
-      const billedTiers = []
-      let actualSize
-      let revisedPrompt
-
-      for (const [index, item] of items.entries()) {
-        if (item === null || typeof item !== 'object') {
-          failures.push(`image ${index + 1}: empty result`)
-          continue
+        receipt.status = outputRecords.length > 0 ? 'partial' : 'failed'
+        receipt.finished_at = new Date().toISOString()
+        receipt.outputs = outputRecords
+        receipt.failures = failures
+        receipt.error = redactText(error?.message ?? String(error))
+        writeReceipt(receiptPath, receipt)
+        if (error instanceof Error && error.name !== 'AbortError') {
+          error.message = redactText(error.message)
         }
-        if (item.error !== undefined && item.b64_json === undefined && item.url === undefined) {
-          const detail = item.error.message ?? item.error.code ?? 'failed'
-          failures.push(`image ${index + 1}: ${detail}`)
-          continue
-        }
-        let bytes
-        try {
-          bytes = await itemBytes(item, exec.signal)
-        } catch (error) {
-          failures.push(`image ${index + 1}: ${error.message}`)
-          continue
-        }
-        if (bytes === undefined) {
-          failures.push(`image ${index + 1}: no b64_json or url`)
-          continue
-        }
-        const actualFormat = imageFormatOf(bytes) ?? responseFormat
-        const ext = actualFormat === 'jpeg' ? 'jpg' : actualFormat
-        const file = join(outDir, `${stamp}-${slug}${items.length > 1 ? `-${index + 1}` : ''}.${ext}`)
-        writeFileSync(file, bytes)
-        files.push(file)
-        actualFormats.push(actualFormat)
-        const deliveredSize = typeof item.size === 'string' ? item.size : undefined
-        if (actualSize === undefined && deliveredSize !== undefined) actualSize = deliveredSize
-        // GPT per-image models bill by the delivered longest side; MiniMax's
-        // tier is the requested area, which its own size cannot express.
-        billedTiers.push(
-          provider === 'gpt' && entry.pricing.mode === 'per_image'
-            ? (billingTierOfSize(deliveredSize) ?? plan.billingTier)
-            : plan.billingTier,
-        )
-        if (revisedPrompt === undefined && typeof item.revised_prompt === 'string') {
-          revisedPrompt = item.revised_prompt
-        }
-      }
-
-      if (files.length === 0) {
-        throw new Error(`${apiLabel} returned no usable image: ${failures.join('; ') || 'empty result'}`)
-      }
-
-      // Gemini image models are token-billed, so their size tier is not a
-      // billing tier; only report it for per-image GPT models and MiniMax areas.
-      const billingTier =
-        provider === 'gpt' && entry.pricing.mode === 'token' ? undefined : billedTiers[0]
-      const unitCosts = billedTiers.map((tier) => costCnyFor(entry, tier))
-      const costCny =
-        unitCosts.length > 0 && unitCosts.every((value) => value !== undefined)
-          ? Number(unitCosts.reduce((sum, value) => sum + value, 0).toFixed(2))
-          : undefined
-
-      return {
-        files,
-        provider,
-        size: actualSize ?? plan.size ?? plan.area ?? 'unknown',
-        model,
-        format: actualFormats[0],
-        ...(billingTier === undefined ? {} : { billing_tier: billingTier }),
-        ...(costCny === undefined ? {} : { cost_cny: costCny }),
-        ...(quality === undefined ? {} : { quality }),
-        ...(revisedPrompt === undefined ? {} : { revised_prompt: revisedPrompt }),
-        ...(failures.length === 0 ? {} : { failed: failures }),
+        throw error
       }
     },
   }))

@@ -5,18 +5,35 @@
  * Node built-ins only. The client never logs the API key and surfaces the
  * server's `request_id` on failure, which is what MiniMax support asks for.
  */
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 
 export class ApiError extends Error {
-  constructor({ status, message, type, requestId, code }) {
+  constructor({ status, message, type, requestId, code, ambiguous = false }) {
     super(`${status} ${type ?? 'api_error'}: ${message}${requestId ? ` (request_id ${requestId})` : ''}`)
     this.name = 'ApiError'
     this.status = status
     this.type = type
     this.requestId = requestId
     this.code = code
+    /**
+     * True when the server may or may not have created/charged the task:
+     * transport failures, aborts, 5xx and malformed successful responses. The
+     * caller must record such a submission as unknown instead of retrying it.
+     */
+    this.ambiguous = ambiguous
   }
+}
+
+/** Mark a thrown network/client error as a possibly-accepted submission. */
+export function markAmbiguous(error) {
+  try {
+    error.ambiguous = true
+  } catch {
+    // primitive throwables are wrapped by the caller anyway
+  }
+  return error
 }
 
 function messageOf(payload) {
@@ -52,8 +69,11 @@ export class MiniMaxVideoClient {
         signal: this.signal,
       })
     } catch (error) {
-      if (error?.name === 'AbortError') throw error
-      throw new Error(`MiniMax request failed: ${error.message}`)
+      if (error?.name === 'AbortError') {
+        markAmbiguous(error)
+        throw error
+      }
+      throw markAmbiguous(new Error(`MiniMax request failed: ${error.message}`))
     }
     const text = await response.text()
     let payload
@@ -64,6 +84,7 @@ export class MiniMaxVideoClient {
         status: response.status,
         message: text.slice(0, 500),
         type: 'non_json_response',
+        ambiguous: response.ok || response.status >= 500,
       })
     }
     if (!response.ok) {
@@ -74,6 +95,7 @@ export class MiniMaxVideoClient {
         type: detail.type,
         code: detail.code,
         requestId: typeof payload?.request_id === 'string' ? payload.request_id : undefined,
+        ambiguous: response.status >= 500,
       })
     }
     return payload
@@ -150,8 +172,35 @@ export function describeUsage(task) {
   return parts.length === 0 ? undefined : parts.join(', ')
 }
 
-/** Download a finished MP4 and return its path. */
-export async function downloadVideo(url, { directory, stem, signal }) {
+function looksLikeMp4(bytes) {
+  return bytes.length >= 1024 && bytes.length >= 12 && bytes.toString('ascii', 4, 8) === 'ftyp'
+}
+
+/**
+ * Download a finished MP4 and return its path, bytes and hash.
+ *
+ * `existingFile` lets a retried download for the same task reuse the already
+ * saved file after a hash/format check (the result URL is time-limited).
+ * New files are opened exclusively: the stem carries the task id plus a random
+ * segment, and a rare name collision retries with a suffix instead of
+ * overwriting another task's output.
+ */
+export async function downloadVideo(url, { directory, stem, signal, existingFile }) {
+  if (typeof existingFile === 'string' && existingFile.length > 0) {
+    try {
+      const existing = readFileSync(existingFile)
+      if (looksLikeMp4(existing)) {
+        return {
+          file: existingFile,
+          bytes: existing.length,
+          sha256: createHash('sha256').update(existing).digest('hex'),
+          reused: true,
+        }
+      }
+    } catch {
+      // fall through to a fresh download
+    }
+  }
   const response = await fetch(url, { signal })
   if (!response.ok) throw new Error(`video download answered HTTP ${response.status}`)
   const bytes = Buffer.from(await response.arrayBuffer())
@@ -159,7 +208,17 @@ export async function downloadVideo(url, { directory, stem, signal }) {
   const branded = bytes.length >= 12 && bytes.toString('ascii', 4, 8) === 'ftyp'
   if (!branded) throw new Error('downloaded result is not an MP4 (missing ftyp box); the URL may have expired')
   mkdirSync(directory, { recursive: true })
-  const file = join(directory, `${stem}.mp4`)
-  writeFileSync(file, bytes)
-  return { file, bytes: bytes.length }
+  const safeStem = String(stem ?? 'video').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 120) || 'video'
+  let file
+  for (let attempt = 0; attempt < 5 && file === undefined; attempt += 1) {
+    const candidate = join(directory, attempt === 0 ? `${safeStem}.mp4` : `${safeStem}-${attempt}.mp4`)
+    try {
+      writeFileSync(candidate, bytes, { flag: 'wx', mode: 0o600 })
+      file = candidate
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error
+    }
+  }
+  if (file === undefined) throw new Error(`could not allocate a unique download filename for stem ${safeStem}`)
+  return { file, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
 }

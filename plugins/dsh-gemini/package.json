@@ -1,8 +1,8 @@
 {
   "name": "dsh-gemini",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "Gemini 4 Argon 多模态工具：写、看、读、对照；支持图片/PDF/片段/文本，自然语言提问。",
+  "description": "Gemini 4 Argon 多模态工具：文学/文字创作与图片/短片综合判断；技术质检留给本地工具与子代理。",
   "type": "module",
   "main": "index.js",
   "exports": {

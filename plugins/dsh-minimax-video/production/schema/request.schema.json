@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dsh.ai-video-request/1",
+  "title": "Offline request envelope produced by the production CLI",
+  "type": "object",
+  "required": ["schema", "args", "authority"],
+  "properties": {
+    "schema": { "const": "dsh.ai-video-request/1" },
+    "authority": { "const": "declared" },
+    "args": {
+      "type": "object",
+      "required": ["shot_id", "prompt", "model", "duration"],
+      "properties": {
+        "project_manifest": { "type": "string" },
+        "shot_id": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "resolution": { "type": "string" },
+        "duration": { "type": "integer", "minimum": 4, "maximum": 15 },
+        "ratio": { "type": "string" },
+        "dialogue": { "type": "array" },
+        "asset_ids": { "type": "object" },
+        "source_declarations": { "type": "array", "items": { "type": "string" } },
+        "first_frame": { "type": "string" },
+        "reference_images": { "type": "array", "items": { "type": "string" } },
+        "reference_audio": { "type": "array", "items": { "type": "string" } },
+        "reference_roles": { "type": "array", "items": { "type": "string" } },
+        "keyframe_override_reason": { "type": "string" },
+        "max_cost": { "type": "number", "minimum": 0 }
+      }
+    },
+    "validation": { "type": "object" },
+    "note": { "type": "string" }
+  }
+}

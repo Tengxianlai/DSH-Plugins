@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dsh.ai-video-evidence/1",
+  "title": "Local evidence report produced by local-qa.js",
+  "description": "Owned by production/local-qa.js. Law: source_sha256 === subject.source.sha256; content_approval is always not_asserted; machine.verdict is deterministic.",
+  "type": "object",
+  "required": ["schema", "source_sha256", "subject", "machine", "content_approval", "limits"],
+  "properties": {
+    "schema": { "const": "dsh.ai-video-evidence/1" },
+    "source_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+    "subject": {
+      "type": "object",
+      "required": ["file", "source"],
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "source": {
+          "type": "object",
+          "required": ["sha256", "bytes"],
+          "properties": {
+            "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+            "bytes": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "container": { "type": ["string", "null"] },
+        "duration_sec": { "type": ["number", "null"] },
+        "video": { "type": ["object", "null"] },
+        "audio": { "type": ["object", "null"] },
+        "streams": { "type": "array" }
+      }
+    },
+    "machine": {
+      "type": "object",
+      "required": ["decode", "frames", "coverage", "verdict"],
+      "properties": {
+        "decode": {
+          "type": "object",
+          "required": ["status"],
+          "properties": {
+            "status": { "enum": ["pass", "fail", "unknown"] },
+            "mode": { "type": "string" },
+            "exit_code": { "type": ["integer", "null"] },
+            "error": { "type": ["string", "null"] },
+            "note": { "type": ["string", "null"] }
+          }
+        },
+        "frames": {
+          "type": "object",
+          "required": ["decoded", "declared", "expected", "shortfall"],
+          "properties": {
+            "decoded": { "type": ["integer", "null"] },
+            "declared": { "type": ["integer", "null"] },
+            "expected": { "type": ["integer", "null"] },
+            "expected_source": { "type": ["string", "null"] },
+            "shortfall": { "type": ["integer", "null"] }
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "required": ["status", "scope", "complete"],
+          "properties": {
+            "status": { "enum": ["verified", "unknown", "mismatch"] },
+            "scope": { "type": "array", "items": { "type": "string" } },
+            "complete": { "type": ["boolean", "null"] },
+            "note": { "type": ["string", "null"] }
+          }
+        },
+        "duration": { "type": "object" },
+        "metrics": { "type": ["object", "null"] },
+        "asr": { "type": ["object", "null"] },
+        "verdict": { "enum": ["pass", "review_required", "fail", "unknown"] }
+      }
+    },
+    "declared": { "type": ["object", "null"] },
+    "content_approval": { "const": "not_asserted" },
+    "limits": { "type": "array", "items": { "type": "string" } }
+  }
+}

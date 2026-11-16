@@ -1,0 +1,660 @@
+{
+  "schema": "ai-video.local-tools/1",
+  "project": "~/DSH_ZONE/VideoStudio/Projects/TanLu-CJU75th",
+  "generated_at": "2026-11-16T18:40:00+08:00",
+  "generated_by": "local-tools-auditor (task-9, read-only)",
+  "scope_note": "只列真实存在、与本地核验/资产引用相关的脚本；付费生成入口（gen_image/gen_tts/视频插件）不在本地 QA 默认路径。status: ran=有落盘产物证据; implemented=代码/说明存在但未找到生产产物; draft=在 .work 草稿区。",
+  "environment": {
+    "ffmpeg": "6.1.1-3ubuntu5",
+    "python": "3.12.3",
+    "asr_venv": ".work/asr-venv (faster-whisper 1.2.1, ctranslate2 4.9.0, numpy 2.5.5)",
+    "asr_model": "Systran/faster-whisper-small snapshot 536b0662742c02347bc0e980a01041f333bce120 (local HF cache, complete)",
+    "image_lib": "PIL/Pillow (system python)",
+    "network_or_paid_api": "none in this inventory"
+  },
+  "tools": [
+    {
+      "id": "asr_blind",
+      "name": "盲转录本地 ASR",
+      "path": "docs/review/MOTION_v04_ASR/tools/run_asr_blind.py",
+      "kind": "asr",
+      "entry": "python3 run_asr_blind.py（修改顶部 CLIPS/WORK 后运行）",
+      "deps": [
+        "faster-whisper",
+        "ctranslate2",
+        "numpy",
+        "ffmpeg",
+        ".work/asr-venv"
+      ],
+      "outputs": [
+        ".work/asr-work/out/*.json",
+        ".work/asr-work/out/*.txt"
+      ],
+      "proves": [
+        "音频中是否含目标中文语句",
+        "字级时码（需波形校正首 token）",
+        "VAD 两遍一致性"
+      ],
+      "does_not_prove": [
+        "口型同步",
+        "表演/动机",
+        "语气听感",
+        "字幕断句"
+      ],
+      "status": "ran",
+      "evidence": [
+        "docs/review/MOTION_v04_ASR/README.md",
+        "docs/review/MOTION_v04_ASR/S01_004_LADDER_FINAL_asr.json",
+        "docs/review/MOTION_v04_ASR/S06_001-1_ZHOUYUAN_FINAL_asr.json",
+        "docs/review/MOTION_v04_ASR/tools/run_asr.log"
+      ],
+      "cost_sec": "10-30s/片段(CPU int8)",
+      "notes": "本机 av 19.0.2 与 faster-whisper 1.2.1 的 decode_audio 不兼容：transcribe(path) 抛 TypeError metadata_errors；本脚本与插件 local_asr.py 都必须先用 ffmpeg 解成 16k mono float32 numpy。见 ASR_ADAPTER.md。"
+    },
+    {
+      "id": "asr_energy_assemble",
+      "name": "ASR 交付打包 + 20ms RMS 能量扫描",
+      "path": ".work/asr-work/assemble.py",
+      "kind": "asr_packaging",
+      "entry": "python3 .work/asr-work/assemble.py",
+      "deps": [
+        "ffmpeg",
+        "numpy",
+        "标准库"
+      ],
+      "outputs": [
+        "docs/review/MOTION_v04_ASR/energy_silence.json",
+        "docs/review/MOTION_v04_ASR/provenance.json",
+        "docs/review/MOTION_v04_ASR/words.csv"
+      ],
+      "proves": [
+        "有声段起止",
+        "句首/句尾静音",
+        "短瞬态（非人声）"
+      ],
+      "does_not_prove": [
+        "口型",
+        "听感"
+      ],
+      "status": "draft",
+      "evidence": [
+        "docs/review/MOTION_v04_ASR/energy_silence.json",
+        "docs/review/MOTION_v04_ASR/provenance.json"
+      ],
+      "note": "正式入口只有 run_asr_blind.py；能量脚本在 .work 草稿区，建议迁入 docs/review 正式目录"
+    },
+    {
+      "id": "vo_asr_verify",
+      "name": "旁白新句核音（ASR+波形+F0）",
+      "path": "docs/review/MOTION_v05_VO/ (产物) / 08_AUDIO/VO/feedback_v05/gen_vo_fix.py (生成)",
+      "kind": "asr_vo",
+      "entry": "python3 08_AUDIO/VO/feedback_v05/gen_vo_fix.py（仅生成时）；核验见 README 手工流程",
+      "deps": [
+        "gen_tts.py 的 preset（只读）",
+        "ffmpeg",
+        ".work/asr-venv"
+      ],
+      "outputs": [
+        "08_AUDIO/VO/feedback_v05/VO_SCIENCE_CAMPUS_FIX_v01.mp3",
+        "docs/review/MOTION_v05_VO/VERIFY.json"
+      ],
+      "proves": [
+        "新句字音/删词残留",
+        "speech 起止/气口/峰值",
+        "F0 参考值"
+      ],
+      "does_not_prove": [
+        "混音听感",
+        "音色连续",
+        "是否可作同一旁白（需人听）"
+      ],
+      "status": "ran",
+      "evidence": [
+        "docs/review/MOTION_v05_VO/README.md",
+        "docs/review/MOTION_v05_VO/VERIFY.json",
+        "docs/review/MOTION_v05_VO/ASR_VO_SCIENCE_CAMPUS_FIX_v01.json"
+      ],
+      "cost_sec": "数秒（解码+ASR）"
+    },
+    {
+      "id": "verify_final_local",
+      "name": "成片指定窗口逐帧/逐秒本地校验",
+      "path": "tools/verify_final_local.py",
+      "kind": "frame_scan",
+      "entry": "python3 tools/verify_final_local.py",
+      "deps": [
+        "ffmpeg",
+        "numpy"
+      ],
+      "outputs": [
+        "docs/review/FEEDBACK_V03_FINAL_LOCAL/LOCAL_VERIFY.json"
+      ],
+      "proves": [
+        "指定窗口内亮度/闪电是否常亮",
+        "帧差连续性",
+        "逐秒 RMS/硬起音",
+        "人物是否离场",
+        "旁白是否在 527s 前起"
+      ],
+      "does_not_prove": [
+        "全片观看",
+        "未扫窗口",
+        "动作自然/色彩/构图"
+      ],
+      "status": "ran",
+      "evidence": [
+        "docs/review/FEEDBACK_V03_FINAL_LOCAL/LOCAL_VERIFY.json"
+      ],
+      "cost_sec": "数分钟（仅扫窗口，640x360 灰度）",
+      "note": "W/H/SR/窗口写死在脚本内（v03 成片）；复用到 v06 需改常量"
+    },
+    {
+      "id": "verify_motion_v05",
+      "name": "v05 交付技术 QC",
+      "path": "tools/verify_motion_v05.py",
+      "kind": "delivery_qc",
+      "entry": "python3 tools/verify_motion_v05.py",
+      "deps": [
+        "ffmpeg",
+        "ffprobe",
+        "PIL",
+        "wave"
+      ],
+      "outputs": [
+        "docs/review/MOTION_v05_FINAL/VERIFY.json",
+        "docs/review/MOTION_v05_FINAL/full_decode.log",
+        "docs/review/MOTION_v05_FINAL/ALL_12_CARDS_FINAL.jpg",
+        "12_FINAL/MOTION_v05/DELIVERY_MANIFEST.json"
+      ],
+      "proves": [
+        "规格/帧数/时长",
+        "完整 AV 解码",
+        "AAC 响度/峰值",
+        "画面清单与 v04 精确一致",
+        "母轨窗口外 PCM 不变",
+        "12 卡/100 字幕点位帧"
+      ],
+      "does_not_prove": [
+        "内容正确",
+        "动作自然",
+        "口型",
+        "听感",
+        "客户验收"
+      ],
+      "status": "ran",
+      "evidence": [
+        "docs/review/MOTION_v05_FINAL/VERIFY.json",
+        "docs/review/MOTION_v05_FINAL/full_decode.log",
+        "docs/review/MOTION_v05_FINAL/ALL_12_CARDS_FINAL.jpg"
+      ],
+      "cost_sec": "30-60s（整片解码）+ 抽帧"
+    },
+    {
+      "id": "verify_motion_v04",
+      "name": "v04 交付技术 QC",
+      "path": "tools/verify_motion_v04.py",
+      "kind": "delivery_qc",
+      "entry": "python3 tools/verify_motion_v04.py",
+      "deps": [
+        "ffmpeg",
+        "ffprobe",
+        "PIL",
+        "wave"
+      ],
+      "outputs": [
+        "docs/review/MOTION_v04_FINAL/VERIFY.json",
+        "docs/review/MOTION_v04_FINAL/full_decode.log",
+        "docs/review/MOTION_v04_FINAL/aac_loudness.json"
+      ],
+      "proves": [
+        "规格/帧数",
+        "完整解码",
+        "响度",
+        "白校训像素中性",
+        "音频三窗补丁外 PCM 逐字节不变"
+      ],
+      "does_not_prove": [
+        "内容/听感/验收"
+      ],
+      "status": "ran",
+      "evidence": [
+        "docs/review/MOTION_v04_FINAL/VERIFY.json",
+        "docs/review/MOTION_v04_FINAL/full_decode.log"
+      ],
+      "cost_sec": "30-60s"
+    },
+    {
+      "id": "verify_streaming1080",
+      "name": "1080P 流媒体派生版校验",
+      "path": "tools/verify_motion_v05_streaming1080.py",
+      "kind": "derivative_qc",
+      "entry": "python3 tools/verify_motion_v05_streaming1080.py",
+      "deps": [
+        "ffmpeg",
+        "ffprobe"
+      ],
+      "outputs": [
+        "docs/review/MOTION_v05_1080P/VERIFY.json",
+        "docs/review/MOTION_v05_1080P/FULL_DECODE.log",
+        "12_FINAL/MOTION_v05/STREAMING_1080P_MANIFEST.json"
+      ],
+      "proves": [
+        "源 2K sha 锁定",
+        "规格/帧数",
+        "完整解码",
+        "音频包散列与源一致（未重编码）",
+        "faststart"
+      ],
+      "does_not_prove": [
+        "画质主观",
+        "听感"
+      ],
+      "status": "ran",
+      "evidence": [
+        "docs/review/MOTION_v05_1080P/VERIFY.json"
+      ],
+      "cost_sec": "30-60s"
+    },
+    {
+      "id": "verify_under200",
+      "name": "200MB 限额版校验",
+      "path": "tools/verify_motion_v05_under200.py",
+      "kind": "derivative_qc",
+      "entry": "python3 tools/verify_motion_v05_under200.py",
+      "deps": [
+        "ffmpeg",
+        "ffprobe"
+      ],
+      "outputs": [
+        "docs/review/MOTION_v05_1080P_UNDER200MB/VERIFY.json",
+        "12_FINAL/MOTION_v05/STREAMING_1080P_UNDER200MB_MANIFEST.json"
+      ],
+      "proves": [
+        "十进制 200,000,000 B 硬上限",
+        "音频包散列一致",
+        "完整解码",
+        "faststart"
+      ],
+      "does_not_prove": [
+        "画质主观"
+      ],
+      "status": "ran",
+      "evidence": [
+        "docs/review/MOTION_v05_1080P_UNDER200MB/VERIFY.json"
+      ],
+      "cost_sec": "30-60s"
+    },
+    {
+      "id": "verify_feedback_v03_final",
+      "name": "v03 终版 QC",
+      "path": "tools/verify_feedback_v03_final.py",
+      "kind": "delivery_qc",
+      "entry": "python3 tools/verify_feedback_v03_final.py",
+      "deps": [
+        "ffmpeg",
+        "ffprobe"
+      ],
+      "outputs": [
+        "12_FINAL/MOTION_v03/DELIVERY_MANIFEST_FINAL.json",
+        "12_FINAL/MOTION_v03/FINAL_FFPROBE_FINAL.json",
+        "12_FINAL/MOTION_v03/verification_frames_final/"
+      ],
+      "proves": [
+        "规格/帧数/时长",
+        "完整 AV 解码",
+        "响度",
+        "SRT 条数",
+        "定点抽帧"
+      ],
+      "does_not_prove": [
+        "内容/听感/验收"
+      ],
+      "status": "ran",
+      "evidence": [
+        "12_FINAL/MOTION_v03/DELIVERY_MANIFEST_FINAL.json",
+        "12_FINAL/MOTION_v03/FINAL_FFPROBE_FINAL.json"
+      ]
+    },
+    {
+      "id": "review_user_v04",
+      "name": "每段中点帧抽取 + 联排",
+      "path": "tools/review_user_v04.py",
+      "kind": "frame_sample",
+      "entry": "python3 tools/review_user_v04.py --video <mp4> --out <project-relative dir>",
+      "deps": [
+        "ffmpeg",
+        "PIL"
+      ],
+      "outputs": [
+        "<out>/actual_midpoints/*.jpg",
+        "<out>/STORYBOARD_*.jpg",
+        "<out>/ACTUAL_FRAME_INDEX_v04.json"
+      ],
+      "proves": [
+        "94 段中点帧存在/可读",
+        "段号/帧号/源映射正确"
+      ],
+      "does_not_prove": [
+        "段内其他帧",
+        "动作/口型",
+        "完整观看"
+      ],
+      "status": "ran",
+      "evidence": [
+        "docs/review/ANIMATIC_v04_DIRECTOR_QC/ACTUAL_FRAME_INDEX_v04.json"
+      ],
+      "cost_sec": "一次性 select 抽帧，数十秒",
+      "note": "manifest 路径写死为 09_EDITING/ANIMATIC_v01/manifest_DIRECTOR_v04.json；换版本需改"
+    },
+    {
+      "id": "keyframe_picker",
+      "name": "离线人工选图册",
+      "path": "tools/build_keyframe_picker.py + tools/keyframe-picker/app.html",
+      "kind": "review_ui",
+      "entry": "python3 tools/build_keyframe_picker.py（构建）→ 浏览器打开 HTML",
+      "deps": [
+        "PIL",
+        "标准库"
+      ],
+      "outputs": [
+        "12_FINAL/KEYFRAME_PICKER_20261115/探路_人工选图册.html",
+        "…/picker-data.json",
+        "…/previews/"
+      ],
+      "proves": [
+        "候选存在/可读/去重/按镜号归组",
+        "导出人工选择 JSON（含 sha256/路径）"
+      ],
+      "does_not_prove": [
+        "图像质量",
+        "批准状态（明确不按旧 PASS/FAIL 隐藏）"
+      ],
+      "status": "ran",
+      "evidence": [
+        "12_FINAL/KEYFRAME_PICKER_20261115/使用说明.md",
+        "09_EDITING/MANUAL_SELECTION_20261115_2203/USER_SELECTION_ORIGINAL.json"
+      ],
+      "note": "扫描 2723 文件→2492 内容组→2487 可显示；5 张无效保留在 errors"
+    },
+    {
+      "id": "check_shots",
+      "name": "镜头表结构校验",
+      "path": "tools/check_shots.py",
+      "kind": "structure_lint",
+      "entry": "python3 tools/check_shots.py [SHOTS.csv]",
+      "deps": [
+        "标准库"
+      ],
+      "outputs": [
+        "stdout"
+      ],
+      "proves": [
+        "表头/order 连续/状态与段落枚举/fact_ids/REWORK risk/duration 可解析/S03_008 不复活"
+      ],
+      "does_not_prove": [
+        "素材存在",
+        "画质",
+        "史实",
+        "听感",
+        "验收"
+      ],
+      "status": "ran",
+      "evidence": [
+        "本次审计实跑：PASS，65 镜，2 WARN(S00_003/S00_004 无 selected_take/in_frame)"
+      ],
+      "cost_sec": "<1"
+    },
+    {
+      "id": "check_scene_refs",
+      "name": "场景派生本地引用预检",
+      "path": "tools/check_scene_refs.py",
+      "kind": "reference_lint",
+      "entry": "python3 tools/check_scene_refs.py --spec <json> --master <img> [--master-sha256] [--cards 01,06,07]",
+      "deps": [
+        "标准库"
+      ],
+      "outputs": [
+        "stdout；BLOCK/PASS"
+      ],
+      "proves": [
+        "refs 非空",
+        "文件存在",
+        "至少一张 ref 内容 sha == 母版 sha（可锁定版本）"
+      ],
+      "does_not_prove": [
+        "母版获批",
+        "服务收到图",
+        "输出几何正确"
+      ],
+      "status": "ran",
+      "evidence": [
+        "本次审计实跑：PASS（derivations_tianquan_v02 + TIANQUAN_MASTER_M1）"
+      ],
+      "cost_sec": "<1"
+    },
+    {
+      "id": "audio_probe",
+      "name": "片段音频体检 + 接缝建议",
+      "path": "tools/audio_probe.py",
+      "kind": "audio_analysis",
+      "entry": "python3 tools/audio_probe.py <dir|files> [--json out] [--csv out]",
+      "deps": [
+        "ffmpeg (astats/ebur128/aspectralstats)",
+        "标准库"
+      ],
+      "outputs": [
+        "stdout；可选 JSON/CSV"
+      ],
+      "proves": [
+        "响度/底噪/频谱重心/立体声相关",
+        "相邻片段差异与建议交叠帧数"
+      ],
+      "does_not_prove": [
+        "听感",
+        "音乐契合",
+        "对白归属"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "只在 docs/handoff/CLOSEOUT_20261116/history/00_PROJECT_BIBLE/POST_PRODUCTION_METHOD.md 被引用；未找到生产落盘产物"
+      ],
+      "cost_sec": "每条 1-3s"
+    },
+    {
+      "id": "hit_detect",
+      "name": "配乐低频重音检测",
+      "path": "tools/hit_detect.py",
+      "kind": "audio_analysis",
+      "entry": "python3 tools/hit_detect.py <music> [--lowpass 150 --min-gap .25 --top 12 --json hits.json]",
+      "deps": [
+        "ffmpeg",
+        "标准库"
+      ],
+      "outputs": [
+        "stdout；可选 JSON"
+      ],
+      "proves": [
+        "低频起音点/强度/时间码"
+      ],
+      "does_not_prove": [
+        "听感",
+        "是否适合切镜"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "08_AUDIO/EXPLORE/LOG.md（原 dirty，本次未读改）",
+        "docs/handoff/WSL_RECEIPT_20261115.*"
+      ],
+      "cost_sec": "整曲几秒"
+    },
+    {
+      "id": "blind_sheet",
+      "name": "盲听评分包",
+      "path": "tools/blind_sheet.py",
+      "kind": "review_workflow",
+      "entry": "python3 tools/blind_sheet.py --dir <audio dir> --out <out dir> [--seed N]",
+      "deps": [
+        "标准库"
+      ],
+      "outputs": [
+        "<out>/audio/*",
+        "order.csv",
+        "sheet.md",
+        "mapping.json"
+      ],
+      "proves": [
+        "盲听流程可复现（种子/映射封存）"
+      ],
+      "does_not_prove": [
+        "评分质量；需人填"
+      ],
+      "status": "implemented",
+      "evidence": [
+        "08_AUDIO/EXPLORE/README.md（引用）"
+      ],
+      "cost_sec": "<1"
+    },
+    {
+      "id": "text_layers",
+      "name": "字幕/字层构建与烧录（v05 模板）",
+      "path": "tools/build_motion_v05_text.py + tools/finish_motion_v05.py",
+      "kind": "text_render",
+      "entry": "复制脚本改 spec/master/out 后再跑（不要对 v05 默认输出重跑）",
+      "deps": [
+        "ffmpeg",
+        "PIL",
+        "旧 OTF 字体"
+      ],
+      "outputs": [
+        "09_EDITING/MOTION_v05/{FINAL_TYPOGRAPHY.fffilter,SUBTITLE_GEOMETRY.json}",
+        "成片字幕/卡层"
+      ],
+      "proves": [
+        "字层几何/文本落盘、按帧循环 trim"
+      ],
+      "does_not_prove": [
+        "观感",
+        "语义对位（需人核）"
+      ],
+      "status": "ran",
+      "evidence": [
+        "09_EDITING/MOTION_v05/TYPE_QC.json",
+        "docs/review/MOTION_v05_STYLE/REPORT.md",
+        "docs/review/MOTION_v05_FINAL/ALL_12_CARDS_FINAL.jpg"
+      ],
+      "cost_sec": "烧录分钟级"
+    },
+    {
+      "id": "audio_patch",
+      "name": "局部声音补丁（窗口外 PCM 保留）",
+      "path": "tools/patch_feedback_v03_audio.py + tools/patch_motion_v05_audio.py",
+      "kind": "audio_patch",
+      "entry": "python3 tools/patch_motion_v05_audio.py",
+      "deps": [
+        "ffmpeg",
+        "wave"
+      ],
+      "outputs": [
+        "08_AUDIO/MOTION_v05/PATCH.json",
+        "MASTER_MOTION_v05.wav"
+      ],
+      "proves": [
+        "只替换指定窗口、窗口外逐字节保留、时长不变"
+      ],
+      "does_not_prove": [
+        "窗口内听感",
+        "响度主观"
+      ],
+      "status": "ran",
+      "evidence": [
+        "08_AUDIO/MOTION_v05/PATCH.json",
+        "docs/review/MOTION_v05_VO/VERIFY.json"
+      ],
+      "cost_sec": "数秒"
+    },
+    {
+      "id": "compile_manifest",
+      "name": "成片 manifest 编译（含转场/字层）",
+      "path": "tools/compile_motion_cut.py + tools/finalize_motion_cut.py",
+      "kind": "manifest_build",
+      "entry": "python3 tools/compile_motion_cut.py (按 generation_order)",
+      "deps": [
+        "标准库",
+        "ffprobe"
+      ],
+      "outputs": [
+        "09_EDITING/MOTION_v05/manifest_motion_v05.json"
+      ],
+      "proves": [
+        "镜/段几何、入点、时长、转场、字层落到 manifest"
+      ],
+      "does_not_prove": [
+        "媒体存在/质量（需下游 verify）"
+      ],
+      "status": "ran",
+      "evidence": [
+        "09_EDITING/MOTION_v05/manifest_motion_v05.json",
+        "docs/review/MOTION_v05_FINAL/VERIFY.json"
+      ]
+    },
+    {
+      "id": "resolve_bridge",
+      "name": "Resolve 工程桥（Windows Resolve + WSL 脚本）",
+      "path": "tools/resolve_mcp.py + tools/resolve_v0x_bridge.py + 09_EDITING/MOTION_v04/resolve_build.py + 09_EDITING/MOTION_v05/resolve_save_no_render.py",
+      "kind": "nle_bridge",
+      "entry": "python3 tools/resolve_mcp.py …（需 Windows Resolve 在线）",
+      "deps": [
+        "Windows DaVinci Resolve Studio 21.1 + ResolveMCP.exe",
+        "网络/文件共享"
+      ],
+      "outputs": [
+        "09_EDITING/MOTION_v04/RESOLVE_BUILD_RECEIPT.json",
+        "09_EDITING/MOTION_v05/RESOLVE_SAVE_RECEIPT.json",
+        "DRP"
+      ],
+      "proves": [
+        "按 recordFrame 摆段/转场/母轨并读回真实几何"
+      ],
+      "does_not_prove": [
+        "渲染输出正确（另需 ffprobe/解码/抽帧）"
+      ],
+      "status": "ran",
+      "evidence": [
+        "09_EDITING/MOTION_v04/RESOLVE_BUILD_RECEIPT.json",
+        "09_EDITING/MOTION_v05/RESOLVE_SAVE_RECEIPT.json"
+      ]
+    }
+  ],
+  "known_pitfalls": [
+    {
+      "tool": "tools/gen_image.py",
+      "issue": "save() 将 API 原始字节写入 --out（批脚本给 .jpg 名时内容是 PNG），out_sha256/bytes 按原始字节计算；后续 PNG->JPEG 转换未刷新旁注",
+      "impact": "SCENES_4K/ENV 28 份记录与交付 .jpg 不符（28/28 与 .work/scene3_png_originals/*.png 相符）",
+      "fix": "registry 分别记录 downloaded_artifact 与 delivered_file 哈希"
+    },
+    {
+      "tool": "tools/review_user_v04.py",
+      "issue": "manifest 路径写死 manifest_DIRECTOR_v04.json",
+      "impact": "换版本直接跑会抽错帧",
+      "fix": "改为参数/读当前 manifest"
+    },
+    {
+      "tool": "tools/verify_final_local.py",
+      "issue": "成片路径、窗口、W/H/SR 写死 v03",
+      "impact": "复用到 v06 会假通过/直接 assert 失败",
+      "fix": "提取常量/参数"
+    },
+    {
+      "tool": "tools/check_scene_refs.py",
+      "issue": "只做本地文件+母版 sha 检查",
+      "impact": "不代表批准/送达/几何",
+      "fix": "与 registry approval 联合使用"
+    },
+    {
+      "tool": "faster_whisper",
+      "issue": "av 19.0.2 不接受 metadata_errors",
+      "impact": "transcribe(path) 必失败",
+      "fix": "ffmpeg->numpy（ASR_ADAPTER.md）"
+    }
+  ]
+}

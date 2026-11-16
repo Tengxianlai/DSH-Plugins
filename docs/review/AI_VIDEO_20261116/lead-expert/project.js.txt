@@ -1,0 +1,148 @@
+import { createHash } from 'node:crypto'
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
+
+export const PROJECT_SCHEMA = 'dsh.ai-video-project/1'
+const APPROVED = new Set(['approved', 'user_approved', 'director_approved', 'locked'])
+const SHA = /^[a-f0-9]{64}$/i
+const issue = (code, message) => ({ level: 'error', code, message })
+export function fileSha256(file) { return createHash('sha256').update(readFileSync(file)).digest('hex') }
+export function publicSource(value) {
+  const text = String(value ?? '')
+  try { const u = new URL(text); if (['http:', 'https:'].includes(u.protocol)) return `${u.origin}${u.pathname}` } catch {}
+  if (text.startsWith('data:')) return `[inline media sha256:${createHash('sha256').update(text).digest('hex')}]`
+  return text
+}
+function within(root, file) { const p = relative(root, file); return p === '' || (!p.startsWith('..') && !isAbsolute(p)) }
+export function findProject(cwd, explicit) {
+  if (explicit) return resolve(cwd, explicit)
+  let dir = resolve(cwd)
+  for (let n = 0; n < 30; n++) {
+    const file = resolve(dir, '.ai-video/project.json')
+    if (existsSync(file)) return file
+    if (existsSync(resolve(dir, '.git'))) return null
+    const parent = dirname(dir); if (parent === dir) break; dir = parent
+  }
+  return null
+}
+export function loadProject({ cwd = process.cwd(), manifest } = {}) {
+  const file = findProject(cwd, manifest)
+  if (!file) return null
+  const data = JSON.parse(readFileSync(file, 'utf8'))
+  if (data.schema !== PROJECT_SCHEMA) throw new Error(`unsupported AI video project schema; expected ${PROJECT_SCHEMA}`)
+  if (!Array.isArray(data.assets) || !Array.isArray(data.shots)) throw new Error('project assets and shots must be arrays')
+  const root = resolve(dirname(file), data.project_root ?? '..')
+  return { data, file, root }
+}
+function inputRows(args) {
+  const rows = []
+  for (const [key, kind] of [['first_frame', 'image'], ['last_frame', 'image']]) if (args[key]) rows.push({ input: args[key], kind, usage: key })
+  for (const [key, kind] of [['reference_images', 'image'], ['reference_videos', 'video'], ['reference_audio', 'audio']]) {
+    for (const [index, input] of (args[key] ?? []).entries()) rows.push({ input, kind, usage: `${key}[${index}]` })
+  }
+  for (const [index, input] of (args.images ?? []).entries()) rows.push({ input, kind: 'image', usage: `images[${index}]` })
+  if (args.video) rows.push({ input: args.video, kind: 'video', usage: 'base_video' })
+  return rows
+}
+function imageAsset(a) { return ['image', 'character', 'scene', 'keyframe'].includes(a.kind) }
+function linesOf(shot) { return (shot?.dialogue ?? []).map(d => typeof d === 'string' ? d : d.line).filter(Boolean) }
+
+/** Validate actual media bytes and approved lineage, not visual/voice quality or human acceptance. */
+export function validateProductionInputs({ cwd = process.cwd(), args = {}, prompt = args.prompt, verifyAll = false } = {}) {
+  const loaded = loadProject({ cwd, manifest: args.project_manifest })
+  if (!loaded) return { project: null, shot: null, issues: [], warnings: [{ code: 'NO_PROJECT_REGISTRY', message: 'No project registry; source approval and card reuse have not been verified.' }], assets: [] }
+  const { data, file, root } = loaded
+  const errors = [], warnings = [], map = new Map(), checked = new Map()
+  const policy = data.policy ?? {}
+  const budget = data.budget
+  if (!verifyAll && policy.require_budget !== false && !budget) errors.push(issue('PROJECT_BUDGET_REQUIRED', 'Registered production requires an explicit project budget before paid submission.'))
+  if (budget && (!budget.id || !Number.isFinite(budget.limit) || budget.limit <= 0 || !['CNY', 'USD'].includes(budget.currency))) errors.push(issue('INVALID_BUDGET', 'Project budget needs an id, positive limit and CNY/USD currency.'))
+  for (const asset of data.assets) {
+    if (!asset || typeof asset.id !== 'string' || !asset.id || map.has(asset.id)) { errors.push(issue('DUPLICATE_ASSET_ID', 'Every asset needs a unique nonempty id.')); continue }
+    map.set(asset.id, asset)
+    if (APPROVED.has(asset.approval) && (!SHA.test(asset.sha256 ?? '') || !asset.approval_evidence)) errors.push(issue('UNPROVEN_APPROVAL', `${asset.id}: approved assets require sha256 and an approval_evidence record; model PASS is not approval.`))
+  }
+  function inspect(id) {
+    if (checked.has(id)) return checked.get(id)
+    const a = map.get(id)
+    if (!a) { errors.push(issue('UNKNOWN_ASSET', `Unknown asset id: ${id}`)); return null }
+    if (!APPROVED.has(a.approval)) { errors.push(issue('ASSET_NOT_APPROVED', `${id}: state ${a.approval ?? 'missing'} cannot enter production.`)); return null }
+    if (typeof a.path !== 'string' || !a.path) { errors.push(issue('ASSET_PATH_MISSING', `${id}: local source path is required.`)); return null }
+    if (/^(https?:|data:|mm_file:)/i.test(a.path)) { errors.push(issue('UNVERIFIED_REMOTE_ASSET', `${id}: copy approved reference bytes locally before production; a URL is not a verified content hash.`)); return null }
+    const p = resolve(root, a.path)
+    try {
+      const real = realpathSync(p)
+      if (!statSync(real).isFile()) throw new Error('not a regular file')
+      if (real.split(/[\\/]/).includes('99_ARCHIVE')) errors.push(issue('ARCHIVED_SOURCE', `${id}: resolved source is archived, including through a compatibility link.`))
+      if (!within(root, real) && policy.allow_external_assets !== true) errors.push(issue('EXTERNAL_ONLY_SOURCE', `${id}: approved source must be retained inside the project or explicitly allowed by project policy.`))
+      const hash = fileSha256(real)
+      if (hash !== a.sha256?.toLowerCase()) errors.push(issue('ASSET_HASH_DRIFT', `${id}: bytes differ from the approved source.`))
+      const info = { id, kind: a.kind, origin: a.origin ?? 'unspecified', path: a.path, sha256: hash, approval: a.approval, root_ids: a.root_ids ?? [] }
+      checked.set(id, info); return info
+    } catch { errors.push(issue('ASSET_UNAVAILABLE', `${id}: approved file is missing or unreadable.`)); return null }
+  }
+  const shots = new Map()
+  for (const s of data.shots) {
+    if (!s?.id || shots.has(s.id)) errors.push(issue('DUPLICATE_SHOT_ID', 'Every shot needs a unique id.'))
+    else shots.set(s.id, s)
+  }
+  const shot = args.shot_id ? shots.get(args.shot_id) : null
+  if (data.shots.length && !args.shot_id && !verifyAll) errors.push(issue('SHOT_ID_REQUIRED', 'This project has a shot register; select shot_id before production.'))
+  if (args.shot_id && !shot) errors.push(issue('UNKNOWN_SHOT', `Shot is not registered: ${args.shot_id}`))
+  const usedIds = new Set(), selected = []
+  for (const row of inputRows(args)) {
+    if (typeof row.input !== 'string' || /^(https?:|data:|mm_file:)/i.test(row.input)) { errors.push(issue('UNVERIFIED_INPUT', `${row.usage}: registered production requires local, hash-verifiable inputs.`)); continue }
+    let hash
+    try { hash = fileSha256(resolve(cwd, row.input)) } catch { errors.push(issue('INPUT_UNAVAILABLE', `${row.usage}: actual input cannot be read.`)); continue }
+    const matches = data.assets.filter(a => a?.sha256?.toLowerCase() === hash)
+    if (!matches.length) { errors.push(issue('UNREGISTERED_SOURCE', `${row.usage}: actual input bytes are not in the approved asset register.`)); continue }
+    const eligible = matches.filter(a => APPROVED.has(a.approval) && (row.kind === 'image' ? imageAsset(a) : a.kind === row.kind))
+    if (!eligible.length) { errors.push(issue('WRONG_SOURCE_STATE_OR_KIND', `${row.usage}: matching bytes are not approved for this media kind.`)); continue }
+    for (const a of eligible) { const checkedAsset = inspect(a.id); if (checkedAsset) { usedIds.add(a.id); selected.push({ ...checkedAsset, usage: row.usage }) } }
+  }
+  const covered = new Set()
+  function lineage(id, active = new Set()) {
+    if (active.has(id)) { errors.push(issue('LINEAGE_CYCLE', `Asset lineage is cyclic at ${id}.`)); return }
+    if (covered.has(id)) return
+    const a = map.get(id); if (!a) { errors.push(issue('MISSING_ROOT', `Missing lineage root ${id}.`)); return }
+    inspect(id); covered.add(id); const next = new Set(active); next.add(id)
+    for (const parent of a.root_ids ?? []) lineage(parent, next)
+  }
+  for (const id of usedIds) lineage(id)
+  if (verifyAll) for (const a of data.assets) if (APPROVED.has(a.approval)) lineage(a.id)
+  if (shot) {
+    const required = [...(shot.characters ?? []), ...(shot.scenes ?? []), ...(shot.required_assets ?? [])]
+    for (const id of required) if (!covered.has(id)) errors.push(issue('REQUIRED_ROOT_NOT_REUSED', `${shot.id}: required character/scene/root ${id} is absent from actual inputs and their declared lineage.`))
+    const keys = shot.keyframes ?? []
+    if (keys.length && !keys.some(id => usedIds.has(id)) && inputRows(args).some(r => r.kind === 'image')) {
+      if (typeof args.keyframe_override_reason !== 'string' || args.keyframe_override_reason.trim().length < 12) errors.push(issue('APPROVED_KEYFRAME_NOT_USED', `${shot.id}: reuse an approved same-shot keyframe; replacing it requires a specific keyframe_override_reason, not file recency or model score.`))
+      else warnings.push({ code: 'KEYFRAME_OVERRIDE_DECLARED', message: `${shot.id}: alternate reference choice recorded; this declaration is not visual verification.` })
+    }
+    if ((required.length || keys.length) && !args.video && !args.source_task_id && !inputRows(args).some(r => r.kind === 'image')) errors.push(issue('MISSING_VISUAL_REFERENCE', `${shot.id}: text-only generation drops registered identity/scene constraints.`))
+    for (const line of linesOf(shot)) if (!String(prompt ?? '').includes(line)) errors.push(issue('APPROVED_DIALOGUE_MISSING', `${shot.id}: an approved dialogue line is absent verbatim from the prompt; an audio reference cannot supply it.`))
+  }
+  for (const a of selected) {
+    if (a.origin === 'video_frame' && (!args.keyframe_override_reason || args.keyframe_override_reason.trim().length < 12)) errors.push(issue('FRAME_CAPTURE_NEEDS_REASON', `${a.id}: video screenshots require a stated continuity/action reason and review of the actual frame.`))
+  }
+  if (args.video) {
+    const source = selected.find(a => a.usage === 'base_video')
+    if (source) {
+      const entry = map.get(source.id), required = new Set(policy.regeneration_requires_qc ?? ['frame_scan', 'motion_review'])
+      if (linesOf(shot).length) required.add('asr')
+      for (const kind of required) {
+        const check = entry.qc?.[kind]
+        if (!check || check.status !== 'pass' || check.source_sha256 !== source.sha256 || !check.evidence) { errors.push(issue('SOURCE_QC_MISSING', `${source.id}: ${kind} needs pass status, matching source_sha256 and a retained evidence path before 2K regeneration.`)); continue }
+        const evidenceFile = resolve(root, check.evidence)
+        if (!existsSync(evidenceFile)) errors.push(issue('QC_EVIDENCE_MISSING', `${source.id}: ${kind} evidence file is absent.`))
+        else if (!SHA.test(check.evidence_sha256 ?? '') || fileSha256(evidenceFile) !== check.evidence_sha256) errors.push(issue('QC_EVIDENCE_DRIFT', `${source.id}: ${kind} evidence hash is missing or changed.`))
+      }
+      warnings.push({ code: 'QC_SCOPE', message: 'ASR checks words; full-frame metrics check measured signals. Neither proves lip sync, identity, natural acting, or human acceptance.' })
+    }
+  }
+  return {
+    project: { id: data.project_id ?? null, manifest: file, root, budget: budget ?? null, policy },
+    shot: shot ?? null, issues: errors, warnings,
+    assets: selected,
+    coverage: { used_asset_ids: [...usedIds], inherited_root_ids: [...covered].filter(id => !usedIds.has(id)), local_bytes_verified: errors.length === 0, visual_semantics_verified: false },
+  }
+}

@@ -1,0 +1,703 @@
+{
+  "schemaVersion": 1,
+  "kind": "dsh-tool-surface-measurement",
+  "generatedAt": "2026-11-16T19:53:45+08:00",
+  "requestedBy": "lead (2026-11-16 19:47 task: short independent offline measurement)",
+  "writtenBy": "history-auditor",
+  "scope": {
+    "plugins": [
+      "dsh-image-gen",
+      "dsh-gemini",
+      "dsh-minimax-video",
+      "dsh-gemini-creative"
+    ],
+    "comparedSides": [
+      "git HEAD (pristine archive)",
+      "current worktree (dirty)"
+    ],
+    "repo": "/home/tengxlper/DSH_ZONE/Projects/DSH-Plugins",
+    "headCommit": "426e00baa805e11c8b0e34fab1368abf08b21e95",
+    "headCommitDate": "Mon Nov 16 12:00:32 2026 +0800",
+    "nodeVersion": "v24.22.0",
+    "worktreeDirtySummary": {
+      "modifiedTrackedFiles": 30,
+      "untrackedPathLines": 13,
+      "note": "porcelain v1 lines captured at measurement time; docs/ is untracked as a whole and contains this file",
+      "sample": [
+        " M README.md",
+        " M plugins/dsh-gemini-creative/README.md",
+        " M plugins/dsh-gemini-creative/assets/gemini-creative.md",
+        " M plugins/dsh-gemini-creative/docs/DETAIL.md",
+        " M plugins/dsh-gemini-creative/index.js",
+        " M plugins/dsh-gemini-creative/locale/en.json",
+        " M plugins/dsh-gemini-creative/locale/zh.json",
+        " M plugins/dsh-gemini-creative/package.json",
+        " M plugins/dsh-gemini-creative/scripts/verify.mjs",
+        " M plugins/dsh-gemini/README.md",
+        " M plugins/dsh-gemini/docs/DETAIL.md",
+        " M plugins/dsh-gemini/index.js"
+      ]
+    }
+  },
+  "method": {
+    "registrationOnly": true,
+    "headSource": "git archive HEAD plugins/dsh-{image-gen,gemini,minimax-video,gemini-creative} | tar -x into a private temp dir; node_modules resolved through a symlink to the repo root node_modules (no install)",
+    "worktreeSource": "import plugins/<name>/index.js in place (read-only)",
+    "mockCtx": "{ tools.register(tool) -> captured, skills.registerProvider(fn) -> fn() then provider.list() captured, logger noop }",
+    "call": "mod.apply(mockCtx, {}) for each plugin; tool.execute() never invoked; no credentials resolve (ctx.credentials absent, unused at registration), no network, no file downloads",
+    "sideEffectContainment": "DSH_HOME and DSH_PROFILE_DIR pointed at the private temp dir; the minimax plugin eagerly creates <DSH_HOME>/state/dsh-minimax-video/{journal,plans,budgets}, which landed under the temp dir, never the real home",
+    "tempCleanup": "private temp dir /tmp/dsh-tool-surface-20261116 removed after copying this JSON (absolute path verified before removal)"
+  },
+  "metricDefinitions": {
+    "modelVisibleProjectionBytes": "UTF-8 bytes of JSON.stringify({name, description, parameters}) — the same shape dsh-tools projectToolSchema() surfaces to the model (lib/index.js:366-376 in @deepseek-ai/dsh-tools; deferLoading omitted because no captured tool sets it)",
+    "descriptionBytes": "UTF-8 bytes of the tool description string only",
+    "parametersBytes": "UTF-8 bytes of JSON.stringify(tool.parameters) (the converted JSON Schema, after parameterSchemaSpecToJsonSchema)",
+    "paramCount": "number of keys in parameters.properties",
+    "requiredCount": "length of parameters.required",
+    "notModelVisible": "output.schema / output.render / execute / timeoutMs are recorded only as metadata; they are not counted in the projection"
+  },
+  "caveats": [
+    "No offline tokenizer was used and none was downloaded: these are UTF-8 byte counts and parameter counts, NOT first-turn prompt tokens and NOT billing.",
+    "Byte counts are an upper-bound-ish proxy: ASCII descriptions tokenize near 4 bytes/token, CJK text (skill descriptions) is several bytes per character, so bytes cannot be converted to tokens reliably.",
+    "Worktree is a live snapshot; another session is actively editing these plugins, so re-measuring later can give different numbers. HEAD is fixed at the commit above.",
+    "Only registration surface was measured. Skill bodies (SKILL.md, assets/*.md) are loaded on demand and are deliberately excluded, except the skill DESCRIPTION strings noted below.",
+    "The measurement imports plugin modules; any import-time side effect other than registration was contained in the private temp DSH_HOME but is not otherwise audited."
+  ],
+  "totals": {
+    "note": "grand totals cover the three tool-bearing plugins only (dsh-gemini-creative registers no tools)",
+    "head": {
+      "toolCount": 8,
+      "descriptionBytes": 3189,
+      "parametersBytes": 13722,
+      "projectionBytes": 17353,
+      "paramCount": 60,
+      "requiredCount": 5
+    },
+    "worktree": {
+      "toolCount": 10,
+      "descriptionBytes": 5743,
+      "parametersBytes": 38570,
+      "projectionBytes": 44864,
+      "paramCount": 154,
+      "requiredCount": 5
+    },
+    "delta": {
+      "toolCount": 2,
+      "descriptionBytes": 2554,
+      "parametersBytes": 24848,
+      "projectionBytes": 27511,
+      "paramCount": 94,
+      "requiredCount": 0
+    },
+    "ratioProjectionBytes": 2.585
+  },
+  "perPlugin": {
+    "dsh-image-gen": {
+      "head": {
+        "toolCount": 2,
+        "toolTotals": {
+          "toolCount": 2,
+          "descriptionBytes": 927,
+          "parametersBytes": 3045,
+          "projectionBytes": 4084,
+          "paramCount": 11,
+          "requiredCount": 1
+        },
+        "tools": [
+          {
+            "name": "image_models",
+            "nameBytes": 12,
+            "descriptionBytes": 187,
+            "descriptionChars": 187,
+            "parametersBytes": 33,
+            "projectionBytes": 274,
+            "paramCount": 0,
+            "requiredCount": 0,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": false,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 106
+          },
+          {
+            "name": "image_generate",
+            "nameBytes": 14,
+            "descriptionBytes": 740,
+            "descriptionChars": 736,
+            "parametersBytes": 3012,
+            "projectionBytes": 3810,
+            "paramCount": 11,
+            "requiredCount": 1,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 443
+          }
+        ],
+        "skills": []
+      },
+      "worktree": {
+        "toolCount": 2,
+        "toolTotals": {
+          "toolCount": 2,
+          "descriptionBytes": 1381,
+          "parametersBytes": 5214,
+          "projectionBytes": 6707,
+          "paramCount": 15,
+          "requiredCount": 1
+        },
+        "tools": [
+          {
+            "name": "image_models",
+            "nameBytes": 12,
+            "descriptionBytes": 187,
+            "descriptionChars": 187,
+            "parametersBytes": 33,
+            "projectionBytes": 274,
+            "paramCount": 0,
+            "requiredCount": 0,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": false,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 106
+          },
+          {
+            "name": "image_generate",
+            "nameBytes": 14,
+            "descriptionBytes": 1194,
+            "descriptionChars": 1188,
+            "parametersBytes": 5181,
+            "projectionBytes": 6433,
+            "paramCount": 15,
+            "requiredCount": 1,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 3546
+          }
+        ],
+        "skills": []
+      },
+      "delta": {
+        "addedTools": [],
+        "removedTools": [],
+        "toolCountDelta": 0,
+        "projectionBytesDelta": 2623,
+        "descriptionBytesDelta": 454,
+        "parametersBytesDelta": 2169,
+        "paramCountDelta": 4,
+        "requiredCountDelta": 0
+      },
+      "directoryBytes": {
+        "headTrackedBytes": 77847,
+        "worktreeBytesExcludingNodeModules": 179869,
+        "headTrackedFiles": 7,
+        "worktreeFilesExcludingNodeModules": 10
+      }
+    },
+    "dsh-gemini": {
+      "head": {
+        "toolCount": 1,
+        "toolTotals": {
+          "toolCount": 1,
+          "descriptionBytes": 285,
+          "parametersBytes": 1110,
+          "projectionBytes": 1443,
+          "paramCount": 6,
+          "requiredCount": 1
+        },
+        "tools": [
+          {
+            "name": "gemini",
+            "nameBytes": 6,
+            "descriptionBytes": 285,
+            "descriptionChars": 283,
+            "parametersBytes": 1110,
+            "projectionBytes": 1443,
+            "paramCount": 6,
+            "requiredCount": 1,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 396
+          }
+        ],
+        "skills": []
+      },
+      "worktree": {
+        "toolCount": 1,
+        "toolTotals": {
+          "toolCount": 1,
+          "descriptionBytes": 870,
+          "parametersBytes": 2054,
+          "projectionBytes": 2972,
+          "paramCount": 10,
+          "requiredCount": 1
+        },
+        "tools": [
+          {
+            "name": "gemini",
+            "nameBytes": 6,
+            "descriptionBytes": 870,
+            "descriptionChars": 866,
+            "parametersBytes": 2054,
+            "projectionBytes": 2972,
+            "paramCount": 10,
+            "requiredCount": 1,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 1156
+          }
+        ],
+        "skills": []
+      },
+      "delta": {
+        "addedTools": [],
+        "removedTools": [],
+        "toolCountDelta": 0,
+        "projectionBytesDelta": 1529,
+        "descriptionBytesDelta": 585,
+        "parametersBytesDelta": 944,
+        "paramCountDelta": 4,
+        "requiredCountDelta": 0
+      },
+      "directoryBytes": {
+        "headTrackedBytes": 29991,
+        "worktreeBytesExcludingNodeModules": 69148,
+        "headTrackedFiles": 9,
+        "worktreeFilesExcludingNodeModules": 9
+      }
+    },
+    "dsh-minimax-video": {
+      "head": {
+        "toolCount": 5,
+        "toolTotals": {
+          "toolCount": 5,
+          "descriptionBytes": 1977,
+          "parametersBytes": 9567,
+          "projectionBytes": 11826,
+          "paramCount": 43,
+          "requiredCount": 3
+        },
+        "tools": [
+          {
+            "name": "video_models",
+            "nameBytes": 12,
+            "descriptionBytes": 223,
+            "descriptionChars": 223,
+            "parametersBytes": 33,
+            "projectionBytes": 310,
+            "paramCount": 0,
+            "requiredCount": 0,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": false,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 106
+          },
+          {
+            "name": "video_generate",
+            "nameBytes": 14,
+            "descriptionBytes": 552,
+            "descriptionChars": 552,
+            "parametersBytes": 3934,
+            "projectionBytes": 4542,
+            "paramCount": 15,
+            "requiredCount": 1,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 531
+          },
+          {
+            "name": "video_task",
+            "nameBytes": 10,
+            "descriptionBytes": 273,
+            "descriptionChars": 273,
+            "parametersBytes": 865,
+            "projectionBytes": 1190,
+            "paramCount": 6,
+            "requiredCount": 1,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 531
+          },
+          {
+            "name": "video_regenerate",
+            "nameBytes": 16,
+            "descriptionBytes": 528,
+            "descriptionChars": 528,
+            "parametersBytes": 2561,
+            "projectionBytes": 3147,
+            "paramCount": 12,
+            "requiredCount": 0,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 531
+          },
+          {
+            "name": "video_prompt_enhance",
+            "nameBytes": 20,
+            "descriptionBytes": 401,
+            "descriptionChars": 401,
+            "parametersBytes": 2174,
+            "projectionBytes": 2637,
+            "paramCount": 10,
+            "requiredCount": 1,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 531
+          }
+        ],
+        "skills": [
+          {
+            "name": "minimax-video",
+            "descriptionChars": 262,
+            "descriptionBytes": 262,
+            "source": "bundled",
+            "rank": 600
+          }
+        ]
+      },
+      "worktree": {
+        "toolCount": 7,
+        "toolTotals": {
+          "toolCount": 7,
+          "descriptionBytes": 3492,
+          "parametersBytes": 31302,
+          "projectionBytes": 35185,
+          "paramCount": 129,
+          "requiredCount": 3
+        },
+        "tools": [
+          {
+            "name": "video_models",
+            "nameBytes": 12,
+            "descriptionBytes": 223,
+            "descriptionChars": 223,
+            "parametersBytes": 33,
+            "projectionBytes": 310,
+            "paramCount": 0,
+            "requiredCount": 0,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": false,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 106
+          },
+          {
+            "name": "video_prepare",
+            "nameBytes": 13,
+            "descriptionBytes": 416,
+            "descriptionChars": 416,
+            "parametersBytes": 7452,
+            "projectionBytes": 7923,
+            "paramCount": 29,
+            "requiredCount": 0,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": false,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 794
+          },
+          {
+            "name": "video_generate",
+            "nameBytes": 14,
+            "descriptionBytes": 630,
+            "descriptionChars": 630,
+            "parametersBytes": 8545,
+            "projectionBytes": 9231,
+            "paramCount": 32,
+            "requiredCount": 1,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 728
+          },
+          {
+            "name": "video_task",
+            "nameBytes": 10,
+            "descriptionBytes": 417,
+            "descriptionChars": 417,
+            "parametersBytes": 865,
+            "projectionBytes": 1334,
+            "paramCount": 6,
+            "requiredCount": 1,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 728
+          },
+          {
+            "name": "video_regenerate",
+            "nameBytes": 16,
+            "descriptionBytes": 1032,
+            "descriptionChars": 1030,
+            "parametersBytes": 8152,
+            "projectionBytes": 9242,
+            "paramCount": 32,
+            "requiredCount": 0,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 728
+          },
+          {
+            "name": "video_prompt_enhance",
+            "nameBytes": 20,
+            "descriptionBytes": 488,
+            "descriptionChars": 488,
+            "parametersBytes": 5350,
+            "projectionBytes": 5900,
+            "paramCount": 23,
+            "requiredCount": 1,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": true,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 728
+          },
+          {
+            "name": "video_budget",
+            "nameBytes": 12,
+            "descriptionBytes": 286,
+            "descriptionChars": 286,
+            "parametersBytes": 905,
+            "projectionBytes": 1245,
+            "paramCount": 7,
+            "requiredCount": 0,
+            "hasDeferLoading": false,
+            "hasTimeoutMs": false,
+            "modelVisibleProjectionKeys": [
+              "name",
+              "description",
+              "parameters"
+            ],
+            "outputSchemaBytes_notModelVisible": 106
+          }
+        ],
+        "skills": [
+          {
+            "name": "minimax-video",
+            "descriptionChars": 262,
+            "descriptionBytes": 262,
+            "source": "bundled",
+            "rank": 600
+          },
+          {
+            "name": "ai-video-production",
+            "descriptionChars": 69,
+            "descriptionBytes": 169,
+            "source": "bundled",
+            "rank": 600
+          }
+        ]
+      },
+      "delta": {
+        "addedTools": [
+          "video_prepare",
+          "video_budget"
+        ],
+        "removedTools": [],
+        "toolCountDelta": 2,
+        "projectionBytesDelta": 23359,
+        "descriptionBytesDelta": 1515,
+        "parametersBytesDelta": 21735,
+        "paramCountDelta": 86,
+        "requiredCountDelta": 0
+      },
+      "directoryBytes": {
+        "headTrackedBytes": 149763,
+        "worktreeBytesExcludingNodeModules": 581978,
+        "headTrackedFiles": 20,
+        "worktreeFilesExcludingNodeModules": 41
+      }
+    },
+    "dsh-gemini-creative": {
+      "head": {
+        "toolCount": 0,
+        "toolTotals": {
+          "toolCount": 0,
+          "descriptionBytes": 0,
+          "parametersBytes": 0,
+          "projectionBytes": 0,
+          "paramCount": 0,
+          "requiredCount": 0
+        },
+        "tools": [],
+        "skills": [
+          {
+            "name": "gemini-creative",
+            "descriptionChars": 302,
+            "descriptionBytes": 364,
+            "source": "custom",
+            "rank": 600
+          }
+        ]
+      },
+      "worktree": {
+        "toolCount": 0,
+        "toolTotals": {
+          "toolCount": 0,
+          "descriptionBytes": 0,
+          "parametersBytes": 0,
+          "projectionBytes": 0,
+          "paramCount": 0,
+          "requiredCount": 0
+        },
+        "tools": [],
+        "skills": [
+          {
+            "name": "gemini-creative",
+            "descriptionChars": 635,
+            "descriptionBytes": 697,
+            "source": "custom",
+            "rank": 600
+          }
+        ]
+      },
+      "delta": {
+        "addedTools": [],
+        "removedTools": [],
+        "toolCountDelta": 0,
+        "projectionBytesDelta": 0,
+        "descriptionBytesDelta": 0,
+        "parametersBytesDelta": 0,
+        "paramCountDelta": 0,
+        "requiredCountDelta": 0
+      },
+      "directoryBytes": {
+        "headTrackedBytes": 13543,
+        "worktreeBytesExcludingNodeModules": 22836,
+        "headTrackedFiles": 10,
+        "worktreeFilesExcludingNodeModules": 10
+      }
+    }
+  },
+  "skillDescriptions": {
+    "note": "creative contributes no tools, so per the task only its skill DESCRIPTION string is measured here; minimax also registers skill descriptions and they are listed for completeness, not added into tool totals",
+    "gemini-creative": {
+      "head": [
+        {
+          "name": "gemini-creative",
+          "descriptionChars": 302,
+          "descriptionBytes": 364,
+          "source": "custom",
+          "rank": 600
+        }
+      ],
+      "worktree": [
+        {
+          "name": "gemini-creative",
+          "descriptionChars": 635,
+          "descriptionBytes": 697,
+          "source": "custom",
+          "rank": 600
+        }
+      ],
+      "deltaChars": 333,
+      "deltaBytes": 333
+    },
+    "minimax-video": {
+      "head": [
+        {
+          "name": "minimax-video",
+          "descriptionChars": 262,
+          "descriptionBytes": 262,
+          "source": "bundled",
+          "rank": 600
+        }
+      ],
+      "worktree": [
+        {
+          "name": "minimax-video",
+          "descriptionChars": 262,
+          "descriptionBytes": 262,
+          "source": "bundled",
+          "rank": 600
+        },
+        {
+          "name": "ai-video-production",
+          "descriptionChars": 69,
+          "descriptionBytes": 169,
+          "source": "bundled",
+          "rank": 600
+        }
+      ]
+    }
+  },
+  "verification": {
+    "applySucceededAllSides": true,
+    "noToolExecute": true,
+    "noNetwork": "plugin imports use no network; execute paths (which fetch) were never entered",
+    "noCredentialsRead": "registration does not call resolveKey/readDotenv; no secret files opened by this measurement",
+    "worktreeUnmodified": "no writes to the repo; only this JSON was added under docs/review/AI_VIDEO_20261116/integration/"
+  }
+}

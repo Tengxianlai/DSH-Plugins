@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dsh.ai-video-review/1",
+  "title": "Declared review record for motion, identity, voice or a mismatched ASR transcript",
+  "description": "A workflow record written by an authorised agent/director. It is not authentication and does not assert user or client content approval.",
+  "type": "object",
+  "required": ["schema", "kind", "source_sha256", "decision", "scope", "reviewer", "authority", "content_approval"],
+  "properties": {
+    "schema": { "const": "dsh.ai-video-review/1" },
+    "kind": { "enum": ["motion_review", "voice_review", "identity_review", "asr"] },
+    "source_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+    "decision": { "enum": ["accepted", "pass"] },
+    "scope": { "type": "string", "minLength": 1 },
+    "reviewer": { "type": "string", "minLength": 1 },
+    "reviewed_at": { "type": "string" },
+    "authority": { "const": "declared" },
+    "content_approval": { "const": "not_asserted" },
+    "evidence": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "string" }
+  }
+}

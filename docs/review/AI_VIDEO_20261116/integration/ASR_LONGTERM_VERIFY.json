@@ -1,0 +1,576 @@
+{
+  "schema": "dsh.ai-video-asr-longterm-verify/1",
+  "generated_at": "2026-11-16T11:17:43.495Z",
+  "generated_by": "local-tools-auditor (task-14 follow-up; read-only on media)",
+  "purpose": "Verify the copied long-term ASR runtime and model are independent of the original TanLu project and usable through inspectMedia().",
+  "paths": {
+    "asr_python": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/bin/python",
+    "asr_model": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/models/faster-whisper-small",
+    "source_venv_retained": "/home/tengxlper/DSH_ZONE/VideoStudio/Projects/TanLu-CJU75th/.work/asr-venv",
+    "source_model_cache_retained": "/home/tengxlper/.cache/huggingface/hub/models--Systran--faster-whisper-small/snapshots/536b0662742c02347bc0e980a01041f333bce120",
+    "evidence_file": "/home/tengxlper/DSH_ZONE/Projects/DSH-Plugins/docs/review/AI_VIDEO_20261116/integration/ASR_LONGTERM_VERIFY.json"
+  },
+  "environment": {
+    "executable": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/bin/python",
+    "sys_prefix": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime",
+    "sys_base_prefix": "/usr",
+    "python_version": "3.12.3",
+    "packages": {
+      "faster_whisper": {
+        "version": "1.2.1",
+        "file": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/lib/python3.12/site-packages/faster_whisper/__init__.py"
+      },
+      "ctranslate2": {
+        "version": "4.9.0",
+        "file": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/lib/python3.12/site-packages/ctranslate2/__init__.py"
+      },
+      "numpy": {
+        "version": "2.5.5",
+        "file": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/lib/python3.12/site-packages/numpy/__init__.py"
+      },
+      "av": {
+        "version": "19.0.2",
+        "file": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/lib/python3.12/site-packages/av/__init__.py"
+      },
+      "tokenizers": {
+        "version": "0.23.3",
+        "file": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/lib/python3.12/site-packages/tokenizers/__init__.py"
+      },
+      "huggingface_hub": {
+        "version": "2.4.0",
+        "file": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/lib/python3.12/site-packages/huggingface_hub/__init__.py"
+      }
+    },
+    "sys_path": [
+      "",
+      "/usr/lib/python312.zip",
+      "/usr/lib/python3.12",
+      "/usr/lib/python3.12/lib-dynload",
+      "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/lib/python3.12/site-packages"
+    ],
+    "independence": {
+      "prefix_is_longterm": true,
+      "base_prefix_is_system": true,
+      "all_packages_load_from_longterm": true,
+      "sys_path_has_original_project_or_old_venv": false,
+      "stale_references": {
+        "status": "repaired",
+        "old_prefix": "/home/tengxlper/DSH_ZONE/VideoStudio/Projects/TanLu-CJU75th/.work/asr-venv",
+        "new_prefix": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime",
+        "repaired_files": [
+          {
+            "name": "activate",
+            "replacements": 2,
+            "sha256_before": "15e7d6ff5ee85c49fcb545b853dc3b6feb3d40182edf52d8a07893c962588d1a",
+            "sha256_after": "b0d647f0677d50da354d9e48aa2899d4ed207da54d7adc39581cc5d1236c099a",
+            "bytes": 2108,
+            "mode": "0o644"
+          },
+          {
+            "name": "activate.csh",
+            "replacements": 1,
+            "sha256_before": "b3b8c13b8342174b442672559fe595a8795f1e99b372ace292ffc0cdfc485dc4",
+            "sha256_after": "5a80096337c137883bd82a3bb6ed520236eb47871a41177080781199e196cd33",
+            "bytes": 960,
+            "mode": "0o644"
+          },
+          {
+            "name": "activate.fish",
+            "replacements": 1,
+            "sha256_before": "224d1f1cd2a51bfe3ee8db1c7d91dd22b6274e88fe9637ab7fd2029f410a052e",
+            "sha256_after": "c40774406380ab8499f5cd5a91e5d1bc621ccaf638a3265b765cd9ab5a5f74c3",
+            "bytes": 2235,
+            "mode": "0o644"
+          },
+          {
+            "name": "ct2-fairseq-converter",
+            "replacements": 1,
+            "sha256_before": "b94b20c1d2f64cedb1e6166622a295ac84c1751f5e5f00e68f65277f827fe446",
+            "sha256_after": "b9fe4ecd57e70a68c13ed004b80c16c55aca96291825d28e54de23d8baaaf94b",
+            "bytes": 229,
+            "mode": "0o755"
+          },
+          {
+            "name": "ct2-marian-converter",
+            "replacements": 1,
+            "sha256_before": "6683d7521f691ea2625e7273386649937dbaed74a50ca7b209134b70309b327d",
+            "sha256_after": "373f7103474e661b8e17f5156affdd3dce19f0de21e91dfb8d0a806c506a64ad",
+            "bytes": 228,
+            "mode": "0o755"
+          },
+          {
+            "name": "ct2-openai-gpt2-converter",
+            "replacements": 1,
+            "sha256_before": "dc1a57e5f038e726ec181f678dcc4e12222bff7e02d20e177d70c83fbe7e2a82",
+            "sha256_after": "2bf0590a94efdc717969883fd92221f182f39112286f51ba22d8b03345cd3fc6",
+            "bytes": 233,
+            "mode": "0o755"
+          },
+          {
+            "name": "ct2-opennmt-py-converter",
+            "replacements": 1,
+            "sha256_before": "fa5a47664f16bb96ad65e3c178e0db0827f5b852f063bbf82d75a50425910d32",
+            "sha256_after": "1cdd8456b43d3ae4f2d07ce7914d1f0330aabb7acdb52e012e865f916e7746b0",
+            "bytes": 232,
+            "mode": "0o755"
+          },
+          {
+            "name": "ct2-opennmt-tf-converter",
+            "replacements": 1,
+            "sha256_before": "f57d228e5ec20f98652c4f3a631866690e03261ff953b4d6b687fc21567270e2",
+            "sha256_after": "b4b1fdd0d246cbba79106457903ea86f54d5ed09512599a14b70d798e54f2fd9",
+            "bytes": 232,
+            "mode": "0o755"
+          },
+          {
+            "name": "ct2-opus-mt-converter",
+            "replacements": 1,
+            "sha256_before": "7f318dd32cb037b60ad1a30f3d9f51d0826e66c2a127b92154cbb424f8653665",
+            "sha256_after": "d370ca222b242a424ccdd9f5b73b7c16a1658012b04de445a1a788be8efe9350",
+            "bytes": 229,
+            "mode": "0o755"
+          },
+          {
+            "name": "ct2-transformers-converter",
+            "replacements": 1,
+            "sha256_before": "a73c4cf0b2b0d279608486ad6ac7583ef3e546a548d42f7d31ce1195c60b2681",
+            "sha256_after": "3a7ae53d03725a7b32bfe49c45723e72d65ee5894c31e6e54ce1ab85f57eef12",
+            "bytes": 234,
+            "mode": "0o755"
+          },
+          {
+            "name": "f2py",
+            "replacements": 1,
+            "sha256_before": "f7e47983bff81b40a907ad02b90ab1e5aff08d85fa5c7c8b2bd95f37d4d5ab43",
+            "sha256_after": "11aacc96c65e33edd26caa99e15b10609a4bce14eac317cbff3a514a4682c536",
+            "bytes": 216,
+            "mode": "0o755"
+          },
+          {
+            "name": "hf",
+            "replacements": 1,
+            "sha256_before": "8d28bf9ff3d163366cb488fb9beecc4e96a77130c11493791782df691c184abb",
+            "sha256_after": "f358742fa4194a12b44c70fb666dcc6bf610333b3a9d178cd677e70a1178e8c6",
+            "bytes": 221,
+            "mode": "0o755"
+          },
+          {
+            "name": "httpx2",
+            "replacements": 1,
+            "sha256_before": "927d4ce2cf5952b19f7df0e1f3a0ed3209da409cbb3b706869e0188bd32ba4cc",
+            "sha256_after": "a4af2059e28397a874a47bf8dec4adfc5ce6024ed808ae37d1ffa6839f83abca",
+            "bytes": 211,
+            "mode": "0o755"
+          },
+          {
+            "name": "idna",
+            "replacements": 1,
+            "sha256_before": "238c06f41cd3d51d78d2fa005462e4293f6940b78888eb6c8e0a254d848adc75",
+            "sha256_after": "14e0be5ea62ed3b1fd3a3cfe590f098db585435677f14064d989e997a86034ba",
+            "bytes": 207,
+            "mode": "0o755"
+          },
+          {
+            "name": "numpy-config",
+            "replacements": 1,
+            "sha256_before": "f6bbf6c37620e2548f3574f81154851bee85c2b6c6613e1b3f66f9bdd8475237",
+            "sha256_after": "19536b86cdee29946b43e33c4dc6efa01ab93663c45e4a04996052b59919e400",
+            "bytes": 216,
+            "mode": "0o755"
+          },
+          {
+            "name": "onnxruntime_test",
+            "replacements": 1,
+            "sha256_before": "7ff5d175f1a9b46eff17ca98ca2d6a20b558aaf12fc859695d76c0dc33e50a02",
+            "sha256_after": "6ea52085fdb9b2439b34870fba622ceb84c2bf63ffa00b68b919f6bba6e89918",
+            "bytes": 233,
+            "mode": "0o755"
+          },
+          {
+            "name": "pip",
+            "replacements": 1,
+            "sha256_before": "741aaac1f42919efbc02ba92d2e8050df04229e84376ad89ec69f71151ee4f2e",
+            "sha256_after": "cad20b404e58911f9558d2861dc21ab00c1efccf34b9c46cf9031689de04ce73",
+            "bytes": 271,
+            "mode": "0o755"
+          },
+          {
+            "name": "pip3",
+            "replacements": 1,
+            "sha256_before": "741aaac1f42919efbc02ba92d2e8050df04229e84376ad89ec69f71151ee4f2e",
+            "sha256_after": "cad20b404e58911f9558d2861dc21ab00c1efccf34b9c46cf9031689de04ce73",
+            "bytes": 271,
+            "mode": "0o755"
+          },
+          {
+            "name": "pip3.12",
+            "replacements": 1,
+            "sha256_before": "741aaac1f42919efbc02ba92d2e8050df04229e84376ad89ec69f71151ee4f2e",
+            "sha256_after": "cad20b404e58911f9558d2861dc21ab00c1efccf34b9c46cf9031689de04ce73",
+            "bytes": 271,
+            "mode": "0o755"
+          },
+          {
+            "name": "pyav",
+            "replacements": 1,
+            "sha256_before": "3b4e93a8d8627ded12cc1d17b56d4fb9b7994bfa530a682a232d5427195559e8",
+            "sha256_after": "81d12c5454a7da8a52a78519b45217dcb0c06a12502ac5e424679de7a84cbedb",
+            "bytes": 210,
+            "mode": "0o755"
+          },
+          {
+            "name": "tiny-agents",
+            "replacements": 1,
+            "sha256_before": "bfed7843650490e856b75ef289a387e031974b7ecf7005e88604f510b95720ad",
+            "sha256_after": "b6ad8f215cb1d47328badd33af3f438c86e841c34b1849863e8cccc43ac556bf",
+            "bytes": 231,
+            "mode": "0o755"
+          },
+          {
+            "name": "tqdm",
+            "replacements": 1,
+            "sha256_before": "55ce026c83649555d7a983890b0ec068a687b9e5c8a754e8bec72064880cbfe4",
+            "sha256_after": "c66e4392cbb54489d2ad5da368ec090542d128526784db99cc9502f8ea5f2f6e",
+            "bytes": 207,
+            "mode": "0o755"
+          }
+        ],
+        "repaired_file_count": 22,
+        "total_replacements": 23,
+        "remaining_old_prefix_files_under_bin": [],
+        "pyvenv_cfg_command": {
+          "kept_as_historical_provenance": true,
+          "not_used_at_runtime": true,
+          "value": "command = /usr/bin/python3 -m venv /home/tengxlper/DSH_ZONE/VideoStudio/Projects/TanLu-CJU75th/.work/asr-venv"
+        },
+        "note": "All copied bin entrypoints (activate variants, pip/pip3/pip3.12, console scripts) now point at the long-term runtime; the pyvenv.cfg command line is historical provenance and is not read for import/runtime resolution."
+      },
+      "pip_maintenance": {
+        "command": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/bin/python -m pip --version",
+        "exit": 0,
+        "stdout": "pip 26.3 from /home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/lib/python3.12/site-packages/pip (python 3.12)"
+      },
+      "activate_verification": {
+        "direct_python": {
+          "executable": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/bin/python",
+          "sys_prefix": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime",
+          "sys_base_prefix": "/usr"
+        },
+        "sourced_activate": {
+          "command": "source <runtime>/bin/activate in a clean bash subshell",
+          "virtual_env": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime",
+          "which_python": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/bin/python",
+          "which_pip": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/bin/pip",
+          "sys_prefix": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime",
+          "executable": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/bin/python",
+          "pip_version": "pip 26.3 from /home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/lib/python3.12/site-packages/pip (python 3.12)",
+          "exit": 0
+        },
+        "pip_module": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/bin/python -m pip --version",
+        "pip_module_exit": 0,
+        "pip_module_stdout": "pip 26.3 from /home/tengxlper/DSH_ZONE/VideoStudio/Tooling/asr-runtime/lib/python3.12/site-packages/pip (python 3.12)",
+        "install_performed": false,
+        "old_venv_sourced": false
+      }
+    }
+  },
+  "model_copy": {
+    "source": "/home/tengxlper/.cache/huggingface/hub/models--Systran--faster-whisper-small/snapshots/536b0662742c02347bc0e980a01041f333bce120",
+    "target": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/models/faster-whisper-small",
+    "files": [
+      {
+        "name": "config.json",
+        "bytes": 2370,
+        "sha256": "b55496ac7940a7ae47d2c01eab40edfd8701feec1229d9cce3b40014383fb828",
+        "cache_sha256": "b55496ac7940a7ae47d2c01eab40edfd8701feec1229d9cce3b40014383fb828",
+        "equal": true
+      },
+      {
+        "name": "model.bin",
+        "bytes": 483546902,
+        "sha256": "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671",
+        "cache_sha256": "3e305921506d8872816023e4c273e75d2419fb89b24da97b4fe7bce14170d671",
+        "equal": true
+      },
+      {
+        "name": "tokenizer.json",
+        "bytes": 2203239,
+        "sha256": "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab",
+        "cache_sha256": "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab",
+        "equal": true
+      },
+      {
+        "name": "vocabulary.txt",
+        "bytes": 459861,
+        "sha256": "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913",
+        "cache_sha256": "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913",
+        "equal": true
+      }
+    ],
+    "all_equal": true,
+    "total_bytes": 486212372,
+    "note": "Byte-identical copies: each copied file has the same sha256 as the HF cache snapshot entry (the cache entries are symlinks into HF blobs; the long-term files are regular files). The ASR model \"fingerprint\" is a stat-manifest of the local directory, so it is instance metadata, not content proof; the file sha256 list above is the content proof. Here the fingerprint happens to match the cache copy because file mtimes were preserved during copying.",
+    "cache_snapshot_entries_are_symlinks": true
+  },
+  "asr_runs": [
+    {
+      "clip": "S01_004_LADDER_FINAL",
+      "file": "/home/tengxlper/DSH_ZONE/VideoStudio/Projects/TanLu-CJU75th/07_SHOT_GENERATION/FEEDBACK_V03_FIX2/S01_004_LADDER_FINAL/2026-11-16_03-03-37-integrated-multimodal-description-shot-1.mp4",
+      "source_sha256": "c7220383a2b4a639597e30055b240724ab08968ca6ed23dd939c58c6233242b7",
+      "subject": {
+        "duration_sec": 6.583,
+        "video": {
+          "index": 0,
+          "type": "video",
+          "codec": "h264",
+          "width": 1344,
+          "height": 768,
+          "r_frame_rate": "24/1",
+          "nb_frames": 158
+        },
+        "audio": {
+          "index": 1,
+          "type": "audio",
+          "codec": "aac",
+          "sample_rate": 32000,
+          "channels": 2
+        }
+      },
+      "expected_text": "白霜是渗水带出来的钙",
+      "asr": {
+        "schema": "dsh.ai-video-local-asr/2",
+        "status": "mismatch",
+        "text": "白霜是渗水带出来的盖",
+        "language": "zh",
+        "normalized_text_match": false,
+        "source_sha256": "c7220383a2b4a639597e30055b240724ab08968ca6ed23dd939c58c6233242b7",
+        "model": {
+          "path": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/models/faster-whisper-small",
+          "name": "faster-whisper-small",
+          "fingerprint": {
+            "method": "files-stat-sha256-of-manifest",
+            "sha256": "c95a9f8b6379403a4175e0d8890965a3a3b2ce14a6ba95d8ba972af442235d78",
+            "files": [
+              {
+                "name": "config.json",
+                "bytes": 2370,
+                "mtime_ns": 1789637341507690800
+              },
+              {
+                "name": "model.bin",
+                "bytes": 483546902,
+                "mtime_ns": 1789637557313757400
+              },
+              {
+                "name": "tokenizer.json",
+                "bytes": 2203239,
+                "mtime_ns": 1789637343478024700
+              },
+              {
+                "name": "vocabulary.txt",
+                "bytes": 459861,
+                "mtime_ns": 1789637343088150300
+              }
+            ]
+          }
+        },
+        "decoding": {
+          "tool": "ffmpeg",
+          "sample_rate": 16000,
+          "channels": 1,
+          "dtype": "float32",
+          "samples": 105472,
+          "duration_sec": 6.592
+        },
+        "audio": {
+          "rms_dbfs": -15.04,
+          "peak_dbfs": 2.5,
+          "silence_threshold_dbfs": -50,
+          "silence_suspected": false,
+          "samples": 105472
+        },
+        "vad": {
+          "enabled": false,
+          "min_silence_ms": null
+        },
+        "warnings": [
+          "homophone_or_substitution_possible"
+        ],
+        "segments": [
+          {
+            "start": 4.54,
+            "end": 6.36,
+            "text": "白霜是渗水带出来的盖",
+            "words": 9
+          }
+        ],
+        "limits": [
+          "ASR proves approximate words in the audio only; it does not prove lip sync, timbre, acting, delivery or listener approval.",
+          "Word timestamps are decoder estimates, not frame-accurate speech boundaries.",
+          "A mismatch can be a homophone/substitution; review the audio and approved line before rejecting a take.",
+          "Silence detection is a coarse RMS threshold; it is not a speech/non-speech classifier."
+        ]
+      },
+      "verdict": "review_required",
+      "content_approval": "not_asserted"
+    },
+    {
+      "clip": "S06_001-1_ZHOUYUAN_FINAL",
+      "file": "/home/tengxlper/DSH_ZONE/VideoStudio/Projects/TanLu-CJU75th/07_SHOT_GENERATION/FEEDBACK_V03_FIX2/S06_001-1_ZHOUYUAN_FINAL/2026-11-16_03-04-22-integrated-multimodal-description-shot-1.mp4",
+      "source_sha256": "0b15308a25fb53056c1959cfd1208071f39d1ca2e2754f5cbf7deac8d70433bf",
+      "subject": {
+        "duration_sec": 5.167,
+        "video": {
+          "index": 0,
+          "type": "video",
+          "codec": "h264",
+          "width": 1344,
+          "height": 768,
+          "r_frame_rate": "24/1",
+          "nb_frames": 124
+        },
+        "audio": {
+          "index": 1,
+          "type": "audio",
+          "codec": "aac",
+          "sample_rate": 32000,
+          "channels": 2
+        }
+      },
+      "expected_text": "老师，结晶面太糙，负压腔漏气，往上滑了！",
+      "asr": {
+        "schema": "dsh.ai-video-local-asr/2",
+        "status": "mismatch",
+        "text": "老师,捷径面太糙,负压枪漏气,往上滑了。",
+        "language": "zh",
+        "normalized_text_match": false,
+        "source_sha256": "0b15308a25fb53056c1959cfd1208071f39d1ca2e2754f5cbf7deac8d70433bf",
+        "model": {
+          "path": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/models/faster-whisper-small",
+          "name": "faster-whisper-small",
+          "fingerprint": {
+            "method": "files-stat-sha256-of-manifest",
+            "sha256": "c95a9f8b6379403a4175e0d8890965a3a3b2ce14a6ba95d8ba972af442235d78",
+            "files": [
+              {
+                "name": "config.json",
+                "bytes": 2370,
+                "mtime_ns": 1789637341507690800
+              },
+              {
+                "name": "model.bin",
+                "bytes": 483546902,
+                "mtime_ns": 1789637557313757400
+              },
+              {
+                "name": "tokenizer.json",
+                "bytes": 2203239,
+                "mtime_ns": 1789637343478024700
+              },
+              {
+                "name": "vocabulary.txt",
+                "bytes": 459861,
+                "mtime_ns": 1789637343088150300
+              }
+            ]
+          }
+        },
+        "decoding": {
+          "tool": "ffmpeg",
+          "sample_rate": 16000,
+          "channels": 1,
+          "dtype": "float32",
+          "samples": 82944,
+          "duration_sec": 5.184
+        },
+        "audio": {
+          "rms_dbfs": -9.98,
+          "peak_dbfs": 3.07,
+          "silence_threshold_dbfs": -50,
+          "silence_suspected": false,
+          "samples": 82944
+        },
+        "vad": {
+          "enabled": false,
+          "min_silence_ms": null
+        },
+        "warnings": [
+          "homophone_or_substitution_possible"
+        ],
+        "segments": [
+          {
+            "start": 0,
+            "end": 4.82,
+            "text": "老师,捷径面太糙,负压枪漏气,往上滑了。",
+            "words": 16
+          }
+        ],
+        "limits": [
+          "ASR proves approximate words in the audio only; it does not prove lip sync, timbre, acting, delivery or listener approval.",
+          "Word timestamps are decoder estimates, not frame-accurate speech boundaries.",
+          "A mismatch can be a homophone/substitution; review the audio and approved line before rejecting a take.",
+          "Silence detection is a coarse RMS threshold; it is not a speech/non-speech classifier."
+        ]
+      },
+      "verdict": "review_required",
+      "content_approval": "not_asserted"
+    }
+  ],
+  "checks": {
+    "local_only_no_download": true,
+    "hf_hub_offline_env_set": true,
+    "paid_api_called": false,
+    "whole_film_decode": false,
+    "profile_or_credentials_changed": false,
+    "bin_entrypoint_prefix_repaired": true,
+    "activate_after_repair_resolves_longterm": true,
+    "original_venv_untouched": true,
+    "site_packages_untouched": true,
+    "model_untouched": true,
+    "pyvenv_cfg_untouched": true
+  },
+  "limits": [
+    "ASR proves approximate words only; it does not prove lip sync, performance, identity, or listener approval.",
+    "The two clips are existing read-only short sources; no take was re-rendered and no paid API was called.",
+    "The copied venv retains historical shebang/VIRTUAL_ENV strings; they are documented, not used for execution.",
+    "The pyvenv.cfg command line still names the original venv as historical provenance; it is not used at runtime and must not be rewritten to fake creation history."
+  ],
+  "post_repair_recheck": {
+    "checked_at": "2026-11-16T11:46:14.396Z",
+    "runs": [
+      {
+        "clip": "S01_004_LADDER_FINAL",
+        "source_sha256": "c7220383a2b4a639597e30055b240724ab08968ca6ed23dd939c58c6233242b7",
+        "asr": {
+          "status": "mismatch",
+          "text": "白霜是渗水带出来的盖",
+          "normalized_text_match": false,
+          "source_sha256": "c7220383a2b4a639597e30055b240724ab08968ca6ed23dd939c58c6233242b7",
+          "model_path": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/models/faster-whisper-small",
+          "model_fingerprint_sha256": "c95a9f8b6379403a4175e0d8890965a3a3b2ce14a6ba95d8ba972af442235d78"
+        },
+        "verdict": "review_required",
+        "content_approval": "not_asserted"
+      },
+      {
+        "clip": "S06_001-1_ZHOUYUAN_FINAL",
+        "source_sha256": "0b15308a25fb53056c1959cfd1208071f39d1ca2e2754f5cbf7deac8d70433bf",
+        "asr": {
+          "status": "mismatch",
+          "text": "老师,捷径面太糙,负压枪漏气,往上滑了。",
+          "normalized_text_match": false,
+          "source_sha256": "0b15308a25fb53056c1959cfd1208071f39d1ca2e2754f5cbf7deac8d70433bf",
+          "model_path": "/home/tengxlper/DSH_ZONE/VideoStudio/Tooling/models/faster-whisper-small",
+          "model_fingerprint_sha256": "c95a9f8b6379403a4175e0d8890965a3a3b2ce14a6ba95d8ba972af442235d78"
+        },
+        "verdict": "review_required",
+        "content_approval": "not_asserted"
+      }
+    ]
+  },
+  "revised_at": "2026-11-16T19:46:54+08:00",
+  "notes": [
+    "bin/ 下 22 个入口（activate 变体、pip/pip3/pip3.12、console scripts）已逐文件 read→精确替换→写回；原 venv、site-packages、model、pyvenv.cfg 均未改动；bin/ 内已无原 venv 前缀。",
+    "pyvenv.cfg 的 command 行保留为历史来源（不参与运行期解析）；按要求不伪造创建历史。"
+  ]
+}

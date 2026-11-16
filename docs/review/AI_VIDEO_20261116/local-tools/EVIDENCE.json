@@ -1,0 +1,412 @@
+{
+  "schema": "ai-video.local-tools-evidence/1",
+  "project": "~/DSH_ZONE/VideoStudio/Projects/TanLu-CJU75th",
+  "audit": {
+    "task": "task-9",
+    "owner": "local-tools-auditor",
+    "date": "2026-11-16",
+    "scope": "read-only audit of local verification tools, approved asset index and reuse",
+    "not_done": [
+      "pay APIs",
+      "Gemini/Claude calls",
+      "full-film decode/rerender",
+      "media/project/tool/manifest/STATE edits",
+      "git commit"
+    ]
+  },
+  "environment_checks": [
+    {
+      "id": "asr_venv_import",
+      "cmd": ".work/asr-venv/bin/python -c \"import faster_whisper,ctranslate2,numpy;…\"",
+      "result": "faster_whisper 1.2.1 / ctranslate2 4.9.0 / numpy 2.5.5",
+      "status": "pass"
+    },
+    {
+      "id": "asr_model_snapshot",
+      "path": "~/.cache/huggingface/hub/models--Systran--faster-whisper-small/snapshots/536b0662742c02347bc0e980a01041f333bce120",
+      "result": "config.json, model.bin, tokenizer.json, vocabulary.txt present",
+      "status": "pass"
+    },
+    {
+      "id": "ffmpeg",
+      "result": "ffmpeg 6.1.1-3ubuntu5",
+      "status": "pass"
+    }
+  ],
+  "checks_run": [
+    {
+      "id": "check_shots",
+      "cmd": "python3 tools/check_shots.py",
+      "exit": 0,
+      "stdout_summary": "共 65 镜；WARN S00_003/S00_004 已 LOCKED 但没有 selected_take / in_frame；通过（2 条提醒）",
+      "interpretation": "结构合法；两条 WARN 来自旧静演字段，不是错误"
+    },
+    {
+      "id": "check_scene_refs",
+      "cmd": "python3 tools/check_scene_refs.py --spec docs/animatic/lines/tianquan/derivations_tianquan_v02.json --master 04_LOCATIONS/ANIMATIC_v01/TIANQUAN/master/TIANQUAN_MASTER_M1_v01.png",
+      "exit": 0,
+      "stdout_summary": "PASS 图片引用在本地存在，所选条目均携带同一母版内容（工具自报不证明获批/送达/几何）",
+      "interpretation": "场景引用预检可用；需与 registry approval 配合才有意义"
+    },
+    {
+      "id": "ffprobe_v05_2k",
+      "cmd": "ffprobe -v error -show_entries format=duration,size -show_entries stream=codec_type,width,height,r_frame_rate,nb_frames,sample_rate,channels -of json 12_FINAL/MOTION_v05/探路_全片字幕与字卡修订_v05_2K.mp4",
+      "result": {
+        "video": "2560x1440, r_frame_rate 24/1, nb_frames 13680",
+        "audio": "48000 Hz, 2 ch",
+        "format": "duration 570.000000, size 1069518035"
+      },
+      "status": "pass",
+      "interpretation": "与 DELIVERY_MANIFEST/验收记录一致（L1）"
+    },
+    {
+      "id": "manifest_closure",
+      "cmd": "python3 遍历 09_EDITING/MOTION_v05/manifest_motion_v05.json",
+      "result": {
+        "shots": 65,
+        "picture_segments": 91,
+        "unique_video_files": 84,
+        "missing_video": 0,
+        "overlays": 19,
+        "overlay_missing": 0,
+        "audio_master_exists": true,
+        "subtitle_font_exists": true,
+        "resolve_transitions": 4,
+        "resolve_fades": 1
+      },
+      "status": "pass",
+      "interpretation": "manifest 内部引用闭包完好；91 段由 84 个唯一文件构成（7 段同源复用）"
+    },
+    {
+      "id": "pending_manifest_counts_conflict",
+      "observed": {
+        "motion_meta.slots_motion": 91,
+        "expected.keyframe_count": 91,
+        "sum_frames": 91,
+        "integration.picture_segments": 92
+      },
+      "interpretation": "integration 段是 feedback_v03 残留计数，同一文件内部不一致；建议删除复制字段"
+    }
+  ],
+  "asset_index_measurements": {
+    "characters": {
+      "approved": 13,
+      "design_files": 14,
+      "identity_roots": [
+        "CHAR_001_IDENTITY_ROOT_1950_v01.png"
+      ],
+      "note": "14 张定稿含穰明德两年代；INDEX 日期 2026-11-15"
+    },
+    "locations": {
+      "scene_cards_4k": 25,
+      "prop_cards": 3,
+      "review_state": "全部待验收，未转 APPROVED（ENV/REVIEW.md）",
+      "animatic_masters": 9
+    },
+    "props": {
+      "PROP_001": "DRAFT（真实参考 16 张，无生成定稿）",
+      "PROP_002": "静演选型（A/B 候选未进关键帧记录）",
+      "PROP_003": "REVIEW"
+    },
+    "keyframe_records": {
+      "count": 90,
+      "refs_total": 226,
+      "unique_ref_assets": 68,
+      "status_distribution": {
+        "DIRECTOR_ACCEPTED_ANIMATIC": 38,
+        "DIRECTOR_ACCEPTED_ANIMATIC_PENDING_GROUP_LAYOUT": 1,
+        "review_only_no_status": 46,
+        "SUPERSEDED_NOT_DELIVERED": 4,
+        "REJECTED_NOT_DELIVERED": 1
+      },
+      "created_range": "2026-11-15T04:28:33+08:00 .. 2026-11-15T07:07:53+08:00"
+    },
+    "user_selection": {
+      "slots": 92,
+      "confirmed": 90,
+      "pending": 2,
+      "copied_files": 90,
+      "import_validation_all_files_match": true,
+      "source": "09_EDITING/MANUAL_SELECTION_20261115_2203/"
+    }
+  },
+  "reuse_measurements": {
+    "top_referenced_assets": [
+      {
+        "path": "04_LOCATIONS/ANIMATIC_v01/BOXGIRDER/BOXGIRDER_ANIMATIC_MASTER_v01.png",
+        "refs": 17
+      },
+      {
+        "path": "04_LOCATIONS/ANIMATIC_v01/TIANQUAN/master/TIANQUAN_MASTER_M1_v01.png",
+        "refs": 17
+      },
+      {
+        "path": "05_PROPS/PROP_001/refs/PROP_001_REF_sckg2025_truss.png",
+        "refs": 13
+      },
+      {
+        "path": "05_PROPS/PROP_002/designs/ANIMATIC_v01/PROP_002_ANIMATIC_MASTER_v01.png",
+        "refs": 12
+      },
+      {
+        "path": "03_CHARACTERS/CHAR_004/designs/CHAR_004_DESIGN_FINAL_v01.jpg",
+        "refs": 11
+      },
+      {
+        "path": "03_CHARACTERS/CHAR_005/designs/CHAR_005_DESIGN_FINAL_v01.jpg",
+        "refs": 11
+      },
+      {
+        "path": "03_CHARACTERS/CHAR_003/designs/CHAR_003_DESIGN_FINAL_v01.jpg",
+        "refs": 10
+      },
+      {
+        "path": "03_CHARACTERS/CHAR_001/designs/CHAR_001_DESIGN_FINAL_v01.jpg",
+        "refs": 9
+      },
+      {
+        "path": "03_CHARACTERS/CHAR_001/designs/CHAR_001_DESIGN_C_FINAL_v01.jpg",
+        "refs": 4
+      },
+      {
+        "path": "03_CHARACTERS/CHAR_001/designs/CHAR_001_IDENTITY_ROOT_1950_v01.png",
+        "refs": 0
+      }
+    ],
+    "by_family": {
+      "04_LOCATIONS": 71,
+      "03_CHARACTERS": 63,
+      "07_SHOT_GENERATION": 39,
+      "05_PROPS": 27,
+      ".work": 25,
+      "11_VFX": 1
+    },
+    "env_cards_used_in_keyframes": {
+      "distinct": 4,
+      "refs": 10,
+      "detail": {
+        "ENV_S05_1964_survey_v02.jpg": 3,
+        "ENV_S05_2018_hzmb_top_v01.jpg": 2,
+        "ENV_S05_1980s_archbridge_v03.jpg": 2,
+        "ENV_S01_2026_deck_hatch_v01.jpg": 2,
+        "ENV_S05_1984_workshop_v02.jpg": 1
+      }
+    },
+    "animatic_masters_refs": 58,
+    "identity_root_created_at": "2026-11-15T15:03:50+08:00 (tool filename 07:03:50 UTC; .work/v02/gen/rang3/...ROOT3_T1, sha aed16ce1...); production path mtime 15:19:34+08:00 = copy time, NOT approval time",
+    "identity_root_refs": 0,
+    "keyframe_to_video_closure": {
+      "prompt_set_clips": 83,
+      "clips_with_image": 81,
+      "unique_images": 80,
+      "with_recorded_sha256_in_orders": 80,
+      "missing": 0
+    },
+    "cross_scope_reuse": [
+      {
+        "image": "07_SHOT_GENERATION/USER_SELECTED_20261115_2203/S06_004/S06_004_f03_98263339a6.png",
+        "clips": [
+          "S06_004-2a",
+          "S06_004-2b"
+        ],
+        "known_issue": "2b prompt 要求教授+橙背心，输入是周原单人图；task-8 报告定位 478s 角色错配"
+      }
+    ],
+    "status_adoption_conflict": {
+      "keyframe": "S03_001_IN_A1_REJECTED_gaze-at-camera.png",
+      "record_status": "REJECTED_NOT_DELIVERED",
+      "adoption": "user_selected",
+      "in_final": true,
+      "manifest_video_sha256": "75453419cd7d86385d1616df129b501318f0d7ad42dc882419f53ae2a1c34628"
+    },
+    "identity_root_refs_scope": "only the 90 ANIMATIC_v01 keyframe records (created 2026-11-15T04:28:33..07:07:53+08:00). All 90 predate the root content (15:03:50+08:00), so 0 refs is expected. The v04 repair batch was generated later (18:52-20:35+08:00) but has no generation records and its adoption QC used the A reference, so root usage is unprovable there.",
+    "identity_root_approval_evidence": "date-level: 03_CHARACTERS/INDEX.md + CHAR_001/NOTES.md (2026-11-15); time-level user decision 12:14-12:17 in 00_PROJECT_BIBLE/DECISIONS.md. No per-image timestamped approval record."
+  },
+  "sidecar_hash_audit": {
+    "method": "recompute sha256 of current file and compare with the sidecar JSON out_sha256; then locate the originally downloaded artifact",
+    "keyframe_records": {
+      "checked": 58,
+      "match": 58,
+      "drift": 0,
+      "unchecked_old_format": 32,
+      "note": "32 older-format records have out_sha256 but no out path (take-named files); not compared one by one"
+    },
+    "animatic_masters": {
+      "checked": 3,
+      "match": 3
+    },
+    "scenes_4k_env": {
+      "records": 28,
+      "recorded_hash_matches": {
+        "target": ".work/scene3_png_originals/<same basename>.png",
+        "matched": 28,
+        "mismatched": 0
+      },
+      "delivered_jpg": {
+        "format": "JPEG (PIL)",
+        "dimensions": "3840x2160",
+        "bytes_range": [
+          1291188,
+          1942186
+        ],
+        "mtime": "2026-11-13T12:50:08+08:00",
+        "identical_to_mac_receive_snapshot": true
+      },
+      "root_cause": "tools/gen_image.py save() writes raw API bytes (PNG) to the --out path (batch scripts passed .jpg names) and hashes that file at generation time; a later PNG->JPEG conversion replaced the delivered files without refreshing the sidecar",
+      "conclusion": "not corruption/overwrite: sidecar records the downloaded PNG artifact; delivered JPEG hash was never recorded. Conversion script/log not found -> conversion step unrecorded.",
+      "example": {
+        "file": "ENV_S01_2026_boxgirder_v04.jpg",
+        "recorded_sha256": "96cfc63a7eab...",
+        "recorded_bytes": 9636727,
+        "png_original_sha256": "96cfc63a7eab...",
+        "delivered_sha256": "aeaed359129b...",
+        "delivered_bytes": 1291188
+      }
+    }
+  },
+  "evidence_artifacts_present": [
+    {
+      "path": "docs/review/FEEDBACK_V03_FINAL_LOCAL/LOCAL_VERIFY.json",
+      "bytes": 2164
+    },
+    {
+      "path": "docs/review/MOTION_v04_FINAL/VERIFY.json",
+      "bytes": 1809
+    },
+    {
+      "path": "docs/review/MOTION_v04_FINAL/full_decode.log",
+      "bytes": null
+    },
+    {
+      "path": "docs/review/MOTION_v05_FINAL/VERIFY.json",
+      "bytes": 1900
+    },
+    {
+      "path": "docs/review/MOTION_v05_FINAL/full_decode.log",
+      "bytes": 0,
+      "note": "ffmpeg stderr 为空=无错误；以 VERIFY.json full_av_decode_exit=0 为准"
+    },
+    {
+      "path": "docs/review/MOTION_v05_FINAL/ALL_12_CARDS_FINAL.jpg",
+      "bytes": null
+    },
+    {
+      "path": "docs/review/MOTION_v05_1080P/VERIFY.json",
+      "bytes": 5489
+    },
+    {
+      "path": "docs/review/MOTION_v05_1080P_UNDER200MB/VERIFY.json",
+      "bytes": 5583
+    },
+    {
+      "path": "docs/review/ANIMATIC_v04_DIRECTOR_QC/ACTUAL_FRAME_INDEX_v04.json",
+      "bytes": 34633
+    },
+    {
+      "path": "docs/review/MOTION_v04_ASR/README.md",
+      "bytes": 8233
+    },
+    {
+      "path": "docs/review/MOTION_v05_VO/VERIFY.json",
+      "bytes": null
+    },
+    {
+      "path": "12_FINAL/MOTION_v03/DELIVERY_MANIFEST_FINAL.json",
+      "bytes": 1848
+    },
+    {
+      "path": "12_FINAL/MOTION_v03/FINAL_FFPROBE_FINAL.json",
+      "bytes": 3702
+    },
+    {
+      "path": "12_FINAL/MOTION_v05/DELIVERY_MANIFEST.json",
+      "bytes": 2146
+    },
+    {
+      "path": "09_EDITING/MOTION_v05/manifest_motion_v05.json",
+      "bytes": 76147
+    },
+    {
+      "path": "09_EDITING/MOTION_v05/RESOLVE_TIMELINE_SPEC.json",
+      "bytes": 83715
+    },
+    {
+      "path": "09_EDITING/MOTION_v05/MIX_SHEET_MOTION_v05.json",
+      "bytes": 74916
+    },
+    {
+      "path": "09_EDITING/MOTION_v05/PICTURE_MASTER/PICTURE_MASTER.json",
+      "bytes": null
+    }
+  ],
+  "not_verified": [
+    "audio_probe.py / hit_detect.py / blind_sheet.py 的生产运行产物（只找到文档引用）",
+    "32 份旧格式关键帧记录的 out 路径与文件 sha（需按 take 名推断后补验）",
+    "SCENES_4K/ENV 的 PNG->JPEG 转换由哪个步骤/脚本完成（未找到日志）",
+    "身份根图片本身的带时刻批准记录（只有日期级 INDEX/NOTES 与 12:14-12:17 的 DECISIONS 用户决定）",
+    "24 张采用版 v04 修复帧是否实际发送了身份根（REBUILD_v04 无生成记录）",
+    "peer 订单字段在不同批次的命名差异是否影响任何历史校验结果（inputs.image vs media_sha256）",
+    "账户实扣与远端任务状态（不属本次只读范围）",
+    "任何 L4/L5 结论：老师验收未发生（STATE 明确待下一会话）"
+  ],
+  "followup_checks": [
+    {
+      "id": "identity_root_timeline",
+      "date": "2026-11-16",
+      "method": "read JSON created fields, LEDGER_v02 rows, DECISIONS, ADOPTION_v04 filename timestamps, stat mtimes",
+      "findings": {
+        "keyframe_created_range": "2026-11-15T04:28:33+08:00 .. 2026-11-15T07:07:53+08:00",
+        "keyframe_records_before_root_content": 90,
+        "keyframe_records_after_root_content": 0,
+        "root_content_first_seen": "2026-11-15T15:03:50+08:00 (tool filename 07:03:50 UTC; .work/v02/gen/rang3/...ROOT3_T1, sha aed16ce1..., 4650347 B)",
+        "root_production_path_mtime": "2026-11-15T15:19:34+08:00 (copy time; same sha as ROOT3_T1)",
+        "user_decision_time": "2026-11-15 12:14-12:17 (+08:00, DECISIONS.md)",
+        "adopted_v04_repairs_with_time": 24,
+        "rebuild_v04_json_records": 0,
+        "adoption_v04_decisions": {
+          "ADOPT_V04": 13,
+          "ADOPT_V04_IF_QC_PASS": 12,
+          "KEEP_V03": 24
+        },
+        "adopted_v04_in_user_selected": 19,
+        "adoption_qc_identity_ref": {
+          "brief": "docs/review/REBUILD_v04_GEMINI_QC/REVIEW_BRIEF.json",
+          "brief_created": "2026-11-15T20:36:00+08:00",
+          "char_001_shots": 7,
+          "identity_ref_used": "_previews/REF_A_rangmingde.jpg",
+          "ref_a_matches": "03_CHARACTERS/CHAR_001/refs/CHAR_001_DERIVED_color_unverified.webp (96x96 gray corr=1.000)",
+          "identity_root_corr": 0.024,
+          "interpretation": "adoption QC compared faces against the A reference, not the newly approved identity root; reinforces the no-back-propagation finding"
+        },
+        "timezone_rule": "DSH plugins name outputs with new Date().toISOString() => filenames are UTC; agent JSON created fields and file mtimes are local +08:00. Normalize before comparing.",
+        "root_pilot_takes_local": "12:21-12:29+08:00 (filenames 04:21-04:29 UTC)",
+        "adopted_v04_repairs_local_time_range": "18:52-20:35+08:00 (filenames 10:52-12:35 UTC)"
+      },
+      "conclusion": "All 90 keyframe records predate the identity root content (15:03:50+08), so 0 refs there is expected and is not evidence of ignoring an available root. The v04 repair batch (25 ADOPT* decisions, 19 REBUILD_v04 images in USER_SELECTED) was generated after the root existed (18:52-20:35+08) but has no generation records, and its adoption QC used the A reference (corr 1.000 to A, 0.024 to root); the frozen USER_SELECTED -> 2K first_frame chain has no back-propagation. mtime is not approval time (copy/transfer times)."
+    },
+    {
+      "id": "asr_adapter",
+      "date": "2026-11-16",
+      "file_checked": "plugins/dsh-minimax-video/production/local_asr.py (plugin repo, read-only; not modified)",
+      "failure_reproduced": "model.transcribe(path) raises TypeError: open() got an unexpected keyword argument metadata_errors (faster_whisper/audio.py:46 via av 19.0.2)",
+      "adapter": "ffmpeg -vn -ac 1 -ar 16000 -f f32le -> np.frombuffer(float32).copy() -> model.transcribe(np_array)",
+      "verified_runs": [
+        {
+          "clip": "S01_004_LADDER_FINAL",
+          "decode_sec": 0.06,
+          "transcribe_sec": 0.86,
+          "text": "白霜是渗水带出来的盖"
+        },
+        {
+          "clip": "S06_001-1_ZHOUYUAN_FINAL",
+          "decode_sec": 0.05,
+          "transcribe_sec": 0.91,
+          "text": "老师,捷径面太糙,负压枪漏气,往上滑了。"
+        }
+      ],
+      "env": ".work/asr-venv Python 3.12.3; faster-whisper 1.2.1 / ctranslate2 4.9.0 / numpy 2.5.5 / av 19.0.2; ffmpeg 6.1.1",
+      "model": "~/.cache/huggingface/hub/models--Systran--faster-whisper-small/snapshots/536b0662742c02347bc0e980a01041f333bce120 (local_files_only=True works)",
+      "deliverable": "ASR_ADAPTER.md"
+    }
+  ]
+}

@@ -4,6 +4,10 @@
  * The API accepts a public URL, `mm_file://{file_id}`, or a data URI. Local
  * session files are inlined as data URIs so a normal workspace path works
  * without an upload step. The 64 MB request cap is enforced before the call.
+ *
+ * `loadLocalFile` is also the snapshot path: callers hash and copy the exact
+ * bytes that were read, so the journal describes the bytes that were submitted,
+ * not whatever the path happens to contain later.
  */
 import { readFileSync, statSync } from 'node:fs'
 import { extname, resolve } from 'node:path'
@@ -34,14 +38,57 @@ const LIMITS_BY_KIND = {
   audio: { bytes: LIMITS.audioBytes, mimes: AUDIO_MIME, label: 'audio' },
 }
 
-function mimeFor(kind, path) {
-  const ext = extname(path.split(/[?#]/)[0]).toLowerCase()
+export function mimeFor(kind, path) {
+  const ext = extname(String(path).split(/[?#]/)[0]).toLowerCase()
   const mime = LIMITS_BY_KIND[kind].mimes[ext]
   if (mime === undefined) {
     const allowed = Object.keys(LIMITS_BY_KIND[kind].mimes).join(', ')
     throw new Error(`unsupported ${kind} extension "${ext}"; use ${allowed}, or pass a public URL`)
   }
   return mime
+}
+
+/** True for inputs that pass straight through to the API unchanged. */
+export function isPassThroughMedia(value) {
+  return /^https?:\/\//i.test(value) || /^mm_file:\/\//i.test(value) || /^data:/i.test(value)
+}
+
+/** Validate one media argument and return its trimmed string value. */
+export function mediaInput(value, kind) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new Error(`${kind} input must be a non-empty path or URL`)
+  }
+  return value.trim()
+}
+
+/**
+ * Read one local media file after the per-asset size check.
+ * Returns the exact bytes plus mime type and size; never mutates the input.
+ */
+export function loadLocalFile(cwd, value, kind) {
+  const meta = LIMITS_BY_KIND[kind]
+  const raw = mediaInput(value, kind)
+  const path = raw.startsWith('file://') ? decodeURIComponent(raw.slice('file://'.length)) : raw
+  const absolute = path.startsWith('/') ? path : resolve(cwd, path)
+  let size
+  try {
+    size = statSync(absolute).size
+  } catch (error) {
+    throw new Error(`cannot read ${meta.label} ${value}: ${error.message}`)
+  }
+  if (size > meta.bytes) {
+    throw new Error(
+      `${meta.label} ${value} is ${(size / 1024 / 1024).toFixed(1)} MB; the API limit is ${meta.bytes / 1024 / 1024} MB per file. Upload it and pass a public URL`,
+    )
+  }
+  const mime = mimeFor(kind, absolute)
+  let bytes
+  try {
+    bytes = readFileSync(absolute)
+  } catch (error) {
+    throw new Error(`cannot read ${meta.label} ${value}: ${error.message}`)
+  }
+  return { absolute, bytes, mime, size }
 }
 
 /**
@@ -51,35 +98,10 @@ function mimeFor(kind, path) {
  * path is read and returned as a data URI after the per-asset size check.
  */
 export function resolveMedia(cwd, input, kind) {
-  if (typeof input !== 'string' || input.trim().length === 0) {
-    throw new Error(`${kind} input must be a non-empty path or URL`)
-  }
-  const value = input.trim()
-  if (/^https?:\/\//i.test(value) || /^mm_file:\/\//i.test(value) || /^data:/i.test(value)) {
-    return value
-  }
-  const path = value.startsWith('file://') ? decodeURIComponent(value.slice('file://'.length)) : value
-  const absolute = path.startsWith('/') ? path : resolve(cwd, path)
-  const meta = LIMITS_BY_KIND[kind]
-  let size
-  try {
-    size = statSync(absolute).size
-  } catch (error) {
-    throw new Error(`cannot read ${meta.label} ${input}: ${error.message}`)
-  }
-  if (size > meta.bytes) {
-    throw new Error(
-      `${meta.label} ${input} is ${(size / 1024 / 1024).toFixed(1)} MB; the API limit is ${meta.bytes / 1024 / 1024} MB per file. Upload it and pass a public URL`,
-    )
-  }
-  const mime = mimeFor(kind, absolute)
-  let bytes
-  try {
-    bytes = readFileSync(absolute)
-  } catch (error) {
-    throw new Error(`cannot read ${meta.label} ${input}: ${error.message}`)
-  }
-  return `data:${mime};base64,${bytes.toString('base64')}`
+  const value = mediaInput(input, kind)
+  if (isPassThroughMedia(value)) return value
+  const file = loadLocalFile(cwd, value, kind)
+  return `data:${file.mime};base64,${file.bytes.toString('base64')}`
 }
 
 /** Reject a JSON body above the API's 64 MB request cap with a useful hint. */

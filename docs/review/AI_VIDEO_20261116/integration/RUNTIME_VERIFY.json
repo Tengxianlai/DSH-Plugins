@@ -1,0 +1,26 @@
+{
+  "schema": "dsh.ai-video-runtime-verification/1",
+  "date_local": "2026-11-16",
+  "timezone": "Asia/Shanghai",
+  "profile": "web",
+  "dsh_version": "0.2.2-rc.3",
+  "managed_install": {"target": "dsh-minimax-video", "result": "already-installed", "changed": false},
+  "managed_recomposition": [
+    {"bundle": "dsh-minimax-video", "enabled": false, "application": "applied"},
+    {"bundle": "dsh-minimax-video", "enabled": true, "application": "applied"},
+    {"bundle": "dsh-image-gen", "enabled": false, "application": "applied"},
+    {"bundle": "dsh-image-gen", "enabled": true, "application": "applied"}
+  ],
+  "plugin_fibers_checked": {"dsh-minimax-video": "active", "dsh-image-gen": "active", "dsh-gemini": "active", "dsh-gemini-creative": "active"},
+  "skill_discovered_and_loaded": "ai-video-production",
+  "smoke_checks": [
+    {"tool": "video_prepare", "model": "MiniMax-H3-Lite", "resolution": "768P", "duration": 4, "prompt_expansion": "disabled", "max_cost": 1.04, "result": "prepared", "cost_currency": "CNY", "cost_estimate": 1.04, "paid_call": false, "note": "No approved project registry was claimed. The test plan is not executed."},
+    {"tool": "image_generate", "dry_run": true, "size": "2k", "aspect": "16:9", "references_file": "", "result": "2048x1152", "request_made": false, "charge": false, "receipt": ".work/runtime-smoke-images/receipts/2026-11-16_12-40-37-8fcfbe9f.json"},
+    {"tool": "gemini", "input": "deliberately absent local mp4", "result": "ENOENT during stat", "request_made": false, "note": "This proves the invalid attachment rejects locally; successful remote inference was intentionally not tested."}
+  ],
+  "process_restart": false,
+  "manual_profile_edits": false,
+  "paid_media_generation": false,
+  "ui_changes": false,
+  "limits": ["Managed applied and active fibers plus safe live preflight checks do not certify remote API generation quality.", "Gemini and image/H3 remote calls were covered by mocked offline tests; no new paid generation was used to verify this repair.", "No browser UI artifacts changed; runtime checks used this existing session and managed plugin APIs."]
+}

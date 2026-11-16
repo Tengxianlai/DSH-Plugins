@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Gemini writing & review",
-    "description": "Write scripts, dialogue, and copy, or review scene images, storyboards, and PDFs against a script. Ask in your own words; attach materials by path.",
+    "description": "Write scripts, dialogue, narration, and copy, or review scene images, storyboards, and PDFs against a script. Technical QC (ASR, frame scanning, ffprobe, lip-sync/identity checks) stays with local tools and subagents; materials go to Gemini 4 Argon by path.",
     "detail": "docs/DETAIL.md"
   }
 }

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dsh.ai-video-qc/1",
+  "title": "One declared QC record bound to source and evidence bytes",
+  "type": "object",
+  "required": ["schema", "kind", "status", "authority", "source_sha256", "evidence", "evidence_sha256", "reviewed_by", "note", "recorded_at"],
+  "properties": {
+    "schema": { "const": "dsh.ai-video-qc/1" },
+    "kind": { "enum": ["frame_scan", "asr", "motion_review", "voice_review", "identity_review"] },
+    "status": { "enum": ["pass", "fail", "review_required"] },
+    "authority": { "const": "declared" },
+    "source_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+    "evidence": { "type": "string", "minLength": 1 },
+    "evidence_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+    "evidence_schema": { "type": "string" },
+    "machine_verdict": { "type": "string" },
+    "machine_pass_scope": { "enum": ["decode_and_coverage", null] },
+    "scope": { "type": "array", "items": { "type": "string" } },
+    "reviewed_by": { "type": "string", "minLength": 1 },
+    "note": { "type": "string", "minLength": 1 },
+    "recorded_at": { "type": "string", "minLength": 1 },
+    "review": {
+      "type": "object",
+      "required": ["authority", "reviewer", "scope"],
+      "properties": {
+        "authority": { "const": "declared" },
+        "reviewer": { "type": "string", "minLength": 1 },
+        "scope": { "type": "string", "minLength": 1 },
+        "declared_status": { "enum": ["accepted", "pass"] },
+        "reviewer_decision": { "enum": ["accepted", "rejected", "pending"] },
+        "raw_asr": { "type": "boolean" }
+      }
+    }
+  }
+}
