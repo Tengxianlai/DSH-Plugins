@@ -2,9 +2,19 @@
 /**
  * dsh-session-id —— 浏览器半边。
  *
- * 在会话标题栏（标题右侧那排 chip 的末尾）显示当前会话 ID 的短形式，
- * 点击把完整 `session-<uuid>` 复制到剪贴板。目的：把会话交给另一个会话/排查时，
- * 不用再翻 URL、翻日志或让用户手动找。
+ * 在会话标题栏（标题右侧那排 chip 的末尾）显示当前会话 ID 的短形式。
+ * 点击把三行写进剪贴板（已知几个写几个）：
+ *
+ *   session-<uuid>
+ *   /home/<user>/<dsh home>/sessions/--<project>--/session-<uuid>/
+ *   /home/<user>/<project>
+ *
+ * 第二行是这个会话在磁盘上的存储目录（`session.v4.jsonl.zstd` 所在目录），
+ * 粘给另一个会话，对方就能直接去读那份日志，不用再翻 URL / 问用户路径；
+ * 第三行是会话的工作目录，方便对方同时知道项目在哪。
+ * 目录来自宿主路由 `/api/session.location`（宿主用 sessionPersistence 解析，
+ * 存储根是 profile 配置，浏览器自己算不出来）；拿不到时退回只复制 ID，
+ * 复制动作永远不为查目录失败而卡住。
  *
  * 挂载点：`conversation.session.header.actions`（list，session 作用域）。
  * 该 slot 的登记项按 order 升序排列，官方占用者：agent-team(-20)、agent-preset(-10)、
@@ -25,6 +35,11 @@ window.__ModuleLoader__.load({
     const NS = 'session-id'
     /** 样式标签稳定标识，用于「只注入一次」。 */
     const CSS_TAG_ID = 'dsh-session-id/badge.css'
+    /**
+     * 宿主位置路由。文档相对写法，与官方 `api/session.markdown` 等一致；
+     * 该路由在 Connection 的认证围栏内，同源 fetch 自带会话 Cookie。
+     */
+    const LOCATION_ROUTE = 'api/session.location'
     /** 与标题栏既有 chip 同高（22px）、同圆角、同色阶，避免视觉上像外来控件。 */
     const CSS = [
       '.sid_badge{box-sizing:border-box;border:0;max-width:180px;height:22px;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-fill-tsp-secondary);color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:22px;padding:0 5px;gap:4px;display:inline-flex;align-items:center;white-space:nowrap;overflow:hidden;cursor:pointer;flex:none}',
@@ -36,19 +51,30 @@ window.__ModuleLoader__.load({
       '.sid_badgeCopied .sid_icon{opacity:1}'
     ].join('')
 
-    /** 字典：标题栏这一处只用到三条文案。 */
+    /** 字典：标题栏这一处只用到这几条文案（tooltip 按"目录已知/读取中/不可用"三态取词）。 */
     const DICT = {
       zh: {
-        copy: '复制会话 ID',
+        copy: '复制会话 ID、存储目录与工作目录',
         copied: '已复制',
-        hint: '会话 ID：{id}\n点击复制完整 ID'
+        hint: '会话 ID：{id}\n存储目录：{dir}\n工作目录：{cwd}\n点击复制以上三项',
+        hintDirOnly: '会话 ID：{id}\n存储目录：{dir}\n点击复制 ID 与存储目录',
+        hintPending: '会话 ID：{id}\n存储目录读取中…\n点击复制 ID',
+        hintUnavailable: '会话 ID：{id}\n存储目录暂不可用（会话未落盘或已不存在）\n点击复制 ID'
       },
       en: {
-        copy: 'Copy session ID',
+        copy: 'Copy session ID, storage dir and working dir',
         copied: 'Copied',
-        hint: 'Session ID: {id}\nClick to copy the full ID'
+        hint: 'Session ID: {id}\nStorage dir: {dir}\nWorking dir: {cwd}\nClick to copy all three',
+        hintDirOnly: 'Session ID: {id}\nStorage dir: {dir}\nClick to copy the ID and storage dir',
+        hintPending: 'Session ID: {id}\nReading storage dir…\nClick to copy the ID',
+        hintUnavailable: 'Session ID: {id}\nStorage dir unavailable (session not on disk yet or deleted)\nClick to copy the ID'
       }
     }
+
+    /** 位置状态初值：刚挂载时还没查。 */
+    const LOCATION_LOADING = Object.freeze({ phase: 'loading' })
+    /** 查询失败（路由缺失/网络错误）：与"查到了但没落盘"共用"不可用"文案。 */
+    const LOCATION_FAILED = Object.freeze({ phase: 'failed' })
 
     /** 只注入一次样式。 */
     function ensureStyle() {
@@ -63,7 +89,7 @@ window.__ModuleLoader__.load({
 
     /**
      * 标题栏里显示的短形式：保留 `session-` 前缀 + UUID 第一段（8 位）。
-     * 既像 ID 又不占宽；完整 ID 在 title 提示里，点击复制的也是完整 ID。
+     * 既像 ID 又不占宽；完整 ID 在 title 提示里，点击复制的也是完整内容。
      * @param {string} sessionId - 完整会话 ID。
      * @returns {string} 截断后的显示文本。
      */
@@ -73,6 +99,57 @@ window.__ModuleLoader__.load({
       const head = uuid.split('-')[0] ?? ''
       if (head.length < 6) return text
       return 'session-' + head
+    }
+
+    /**
+     * 复制文本：完整 ID、会话存储目录、会话工作目录各一行（已知几个写几个）。
+     * 存储目录拿不到（未落盘/已删除/路由不可用）时只写 ID 一行——不猜路径。
+     * @param {string} sessionId - 完整会话 ID。
+     * @param {object} location - 位置状态。
+     * @returns {string} 写入剪贴板的文本。
+     */
+    function copyText(sessionId, location) {
+      if (location === null || location.phase !== 'ready' || location.dir === null) return sessionId
+      const lines = [sessionId, location.dir]
+      if (location.cwd !== null) lines.push(location.cwd)
+      return lines.join('\n')
+    }
+
+    /**
+     * 查一次会话存储位置。
+     * @param {string} sessionId - 完整会话 ID。
+     * @param {AbortSignal} signal - 卸载/切会话时取消。
+     * @returns {Promise<object>} `{phase:'ready',dir,log,cwd}` 或 `{phase:'failed'}`。
+     */
+    async function fetchLocation(sessionId, signal) {
+      const response = await fetch(LOCATION_ROUTE + '?sessionId=' + encodeURIComponent(sessionId), {
+        signal,
+        credentials: 'same-origin',
+        headers: { accept: 'application/json' }
+      })
+      if (!response.ok) return LOCATION_FAILED
+      let body
+      try {
+        body = await response.json()
+      } catch {
+        return LOCATION_FAILED
+      }
+      if (body === null || typeof body !== 'object') return LOCATION_FAILED
+      return {
+        phase: 'ready',
+        dir: textOrNull(body.dir),
+        log: textOrNull(body.log),
+        cwd: textOrNull(body.cwd)
+      }
+    }
+
+    /**
+     * 取非空字符串，其余一律 null。
+     * @param {unknown} value - 待检查的值。
+     * @returns {string|null} 可用的字符串或 null。
+     */
+    function textOrNull(value) {
+      return typeof value === 'string' && value !== '' ? value : null
     }
 
     /**
@@ -136,18 +213,47 @@ window.__ModuleLoader__.load({
       const sessionId = props.sessionId
       const t = props.t
       const [copied, setCopied] = react.useState(false)
+      const [location, setLocation] = react.useState(LOCATION_LOADING)
+      // 点击处理里要同步读到最新位置：state 的更新是异步的，ref 才是同一拍的值。
+      const locationRef = react.useRef(LOCATION_LOADING)
+      const controller = react.useRef(null)
       const timer = react.useRef(0)
 
-      // 切会话时清掉上一个会话的"已复制"状态，避免短形式换成新 ID 后仍显示成功色。
+      /**
+       * 发起（或重发）一次位置查询；新请求会取消上一个。
+       * @param {string} id - 当前会话 ID。
+       */
+      function loadLocation(id) {
+        if (controller.current !== null) controller.current.abort()
+        const next = new AbortController()
+        controller.current = next
+        fetchLocation(id, next.signal).then((value) => {
+          if (next.signal.aborted) return
+          locationRef.current = value
+          setLocation(value)
+        }).catch(() => {
+          if (next.signal.aborted) return
+          locationRef.current = LOCATION_FAILED
+          setLocation(LOCATION_FAILED)
+        })
+      }
+
+      // 切会话时：清掉"已复制"状态与上一个会话的位置，再按新 ID 查一次。
       react.useEffect(() => {
         setCopied(false)
         if (timer.current) {
           clearTimeout(timer.current)
           timer.current = 0
         }
+        locationRef.current = LOCATION_LOADING
+        setLocation(LOCATION_LOADING)
+        if (typeof sessionId === 'string' && sessionId !== '') loadLocation(sessionId)
+        return () => {
+          if (controller.current !== null) controller.current.abort()
+        }
       }, [sessionId])
 
-      // 卸载时清计时器，别让已销毁组件里跑 setState。
+      // 卸载时清计时器，别让已销毁组件里跑 setState（Controller 由上面那个 effect 的清理收）。
       react.useEffect(() => () => {
         if (timer.current) clearTimeout(timer.current)
       }, [])
@@ -155,8 +261,9 @@ window.__ModuleLoader__.load({
       if (typeof sessionId !== 'string' || sessionId === '') return null
 
       const onClick = async () => {
+        const current = locationRef.current
         try {
-          await writeClipboard(sessionId)
+          await writeClipboard(copyText(sessionId, current))
         } catch {
           return
         }
@@ -166,14 +273,29 @@ window.__ModuleLoader__.load({
           timer.current = 0
           setCopied(false)
         }, 1500)
+        // 目录还没拿到（点得太早、或上次查询失败）：补一次；这次先复制 ID，不让人干等。
+        if (!(current.phase === 'ready' && current.dir !== null)) loadLocation(sessionId)
+      }
+
+      let hint
+      if (location.phase === 'ready' && location.dir !== null) {
+        hint = location.cwd !== null
+          ? t('hint', { id: sessionId, dir: location.dir, cwd: location.cwd })
+          : t('hintDirOnly', { id: sessionId, dir: location.dir })
+      } else if (location.phase === 'loading') {
+        hint = t('hintPending', { id: sessionId })
+      } else {
+        hint = t('hintUnavailable', { id: sessionId })
       }
 
       return react.createElement('button', {
         type: 'button',
         className: 'sid_badge' + (copied ? ' sid_badgeCopied' : ''),
-        title: t('hint', { id: sessionId }),
+        title: hint,
         'aria-label': t('copy'),
         'data-dsh-session-id': sessionId,
+        'data-dsh-session-dir': location.phase === 'ready' && location.dir !== null ? location.dir : undefined,
+        'data-dsh-session-location': location.phase,
         onClick
       },
         react.createElement('span', { className: 'sid_text' }, copied ? t('copied') : shortId(sessionId)),
