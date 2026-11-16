@@ -147,6 +147,62 @@ test('same bytes are ambiguous without asset_ids and bind when declared', (t) =>
   assert.ok(codes(countMismatch).includes('ASSET_ID_COUNT_MISMATCH'))
 })
 
+test('native full-field asset_ids with unused blank slots binds like a sparse valid map', (t) => {
+  const f = fixture(t)
+  const base = {
+    shot_id: 'S1',
+    prompt: 'hero says: 白霜是渗水带出来的钙。',
+    first_frame: 'assets/key.png',
+  }
+  const denseIds = {
+    first_frame: 'K1',
+    last_frame: '',
+    base_video: null,
+    reference_images: [],
+    reference_videos: null,
+    reference_audio: [],
+  }
+  const sparse = f.check({ ...base, asset_ids: { first_frame: 'K1' } })
+  const dense = f.check({ ...base, asset_ids: denseIds })
+  assert.deepEqual(codes(sparse), [])
+  assert.deepEqual(codes(dense), codes(sparse))
+  assert.deepEqual(dense.assets.map((asset) => asset.id), sparse.assets.map((asset) => asset.id))
+  assert.deepEqual(dense.coverage.used_asset_ids, sparse.coverage.used_asset_ids)
+  assert.deepEqual(dense.coverage.inherited_root_ids, sparse.coverage.inherited_root_ids)
+
+  const usedBlank = f.check({ ...base, asset_ids: { first_frame: '' } })
+  assert.ok(codes(usedBlank).includes('INVALID_ASSET_ID'))
+
+  const idWithoutMedia = f.check({
+    shot_id: 'S1',
+    prompt: 'hero says: 白霜是渗水带出来的钙。',
+    asset_ids: { last_frame: 'K1' },
+  })
+  assert.ok(codes(idWithoutMedia).includes('ASSET_ID_WITHOUT_MEDIA'))
+
+  const countMismatch = f.check({
+    ...base,
+    reference_images: ['assets/key.png'],
+    asset_ids: { first_frame: 'K1', reference_images: [] },
+  })
+  assert.ok(codes(countMismatch).includes('ASSET_ID_COUNT_MISMATCH'))
+
+  const blankEntry = f.check({
+    ...base,
+    reference_images: ['assets/key.png'],
+    asset_ids: { first_frame: 'K1', reference_images: [''] },
+  })
+  assert.ok(codes(blankEntry).includes('INVALID_ASSET_ID_LIST'))
+  assert.ok(!codes(blankEntry).includes('ASSET_ID_COUNT_MISMATCH'), 'blank entries must not be filtered into a shift')
+
+  const requestFile = resolve(f.root, 'dense-request.json')
+  writeFileSync(requestFile, JSON.stringify({ args: { ...base, asset_ids: denseIds } }))
+  const cli = f.runJson(['check', '--request', requestFile])
+  assert.equal(cli.status, 0, cli.stderr)
+  assert.deepEqual(cli.json.issues, [])
+  assert.deepEqual(cli.json.assets.map((asset) => asset.id), sparse.assets.map((asset) => asset.id))
+})
+
 test('unregistered, candidate and changed roots cannot silently enter generation', (t) => {
   const f = fixture(t)
   writeAsset(f.root, 'unseen', 'unseen-bytes')

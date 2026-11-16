@@ -39,25 +39,135 @@ export function mediaSlots(args, { includeBaseVideo = false } = {}) {
 }
 
 /**
- * Optional media accepts an omitted value, null, an empty string or a
- * whitespace-only string; all mean "not provided" so a caller that serializes
- * an empty optional field does not spend nine attempts on a schema error.
- * Arrays are normalized by dropping empty entries. Required fields (prompt,
- * task_id) stay strict, and a prompt that references <Picture N> with no actual
- * media is still rejected by the contract check.
+ * Asset-id slots understood by the production registry. Scalar slots carry one
+ * id; array slots carry one id per media item and keep their positions.
+ */
+export const ASSET_ID_SLOT_KINDS = {
+  first_frame: 'scalar',
+  last_frame: 'scalar',
+  base_video: 'scalar',
+  reference_images: 'array',
+  reference_videos: 'array',
+  reference_audio: 'array',
+  images: 'array',
+}
+
+function mediaPresent(args, slot) {
+  if (slot === 'base_video') {
+    return typeof args.video === 'string' && args.video.trim().length > 0
+  }
+  if (slot === 'first_frame' || slot === 'last_frame') {
+    return typeof args[slot] === 'string' && args[slot].trim().length > 0
+  }
+  const value = args[slot]
+  return Array.isArray(value) && value.length > 0
+}
+
+/**
+ * Normalize the optional slot -> registered-asset-id map without mutating it.
+ *
+ * Native tool serialization emits every field, so unused slots arrive as null,
+ * "" or [] and must not fail validation. Boundaries:
+ *   - unused scalar slot: undefined/null/blank id is dropped; a real non-empty
+ *     id is kept so "id without media" still errors;
+ *   - unused array slot: null or [] is dropped; a non-empty array is kept so a
+ *     real id without media still errors;
+ *   - used slot: values are preserved (never filtered), so empty entries,
+ *     wrong types and length mismatches still error and no id array can shift;
+ *   - unknown slots and wrong top-level types are preserved for the validator;
+ *   - empty result becomes undefined, making {} and omission equivalent in the
+ *     plan fingerprint.
+ */
+export function normalizeAssetIds(assetIds, args) {
+  if (assetIds === undefined || assetIds === null) return undefined
+  if (typeof assetIds !== 'object' || Array.isArray(assetIds)) return assetIds
+  // Null-prototype accumulator so an unknown JSON key named "__proto__" is
+  // preserved as an own property for the validator instead of mutating a
+  // prototype or disappearing from Object.keys.
+  const out = Object.create(null)
+  for (const [slot, value] of Object.entries(assetIds)) {
+    const kind = Object.hasOwn(ASSET_ID_SLOT_KINDS, slot) ? ASSET_ID_SLOT_KINDS[slot] : undefined
+    if (kind === undefined) {
+      out[slot] = value
+      continue
+    }
+    const used = mediaPresent(args, slot)
+    if (kind === 'scalar') {
+      if (value === undefined || value === null) continue
+      if (typeof value === 'string' && value.trim().length === 0) {
+        if (!used) continue
+        out[slot] = value
+        continue
+      }
+      out[slot] = value
+      continue
+    }
+    if (value === undefined || value === null) {
+      if (!used) continue
+      out[slot] = value
+      continue
+    }
+    if (!Array.isArray(value)) {
+      out[slot] = value
+      continue
+    }
+    if (value.length === 0 && !used) continue
+    out[slot] = value
+  }
+  return Object.keys(out).length === 0 ? undefined : { ...out }
+}
+
+/**
+ * Shared argument normalization for H3 prepare/generate/regenerate and the
+ * production registry (direct validator and CLI check).
+ *
+ * Optional top-level media accepts omission, null, "" or whitespace as absent;
+ * arrays with null are absent and empty entries are dropped. The nested
+ * asset_ids map is normalized by normalizeAssetIds above. Required fields
+ * (prompt, task_id) stay strict and a prompt that references a missing media
+ * tag is still rejected by the contract check.
  */
 export function normalizeMediaArgs(args) {
   const out = { ...args }
   for (const key of ['first_frame', 'last_frame', 'video']) {
     const value = args[key]
-    out[key] = typeof value === 'string' && value.trim().length === 0 ? undefined : value
+    out[key] = value === undefined || value === null
+      ? undefined
+      : typeof value === 'string' && value.trim().length === 0
+        ? undefined
+        : value
   }
   for (const key of ['reference_images', 'reference_videos', 'reference_audio']) {
     const value = args[key]
-    if (Array.isArray(value)) {
+    if (value === null) {
+      out[key] = undefined
+    } else if (Array.isArray(value)) {
       out[key] = value.filter((entry) => typeof entry === 'string' && entry.trim().length > 0)
     }
   }
+  // Optional id/path strings: native full-field serialization may send "" or
+  // null for "not provided". Empty means absent so budget/manifest/shot/source
+  // selection uses the documented default instead of a bogus empty selector.
+  // Required strings (prompt/task_id) and numeric fields (max_cost=0) are not
+  // touched here.
+  for (const key of [
+    'budget_id',
+    'project_manifest',
+    'shot_id',
+    'source_asset_id',
+    'original_task_id',
+    'source_task_id',
+  ]) {
+    const value = args[key]
+    out[key] = value === undefined || value === null
+      ? undefined
+      : typeof value === 'string' && value.trim().length === 0
+        ? undefined
+        : value
+  }
+  const assetIds = normalizeAssetIds(args.asset_ids, out)
+  if (assetIds === undefined) delete out.asset_ids
+  else out.asset_ids = assetIds
   return out
 }
 
@@ -324,10 +434,10 @@ export function operationFingerprint({
 export function canonicalAssetIds(value) {
   if (value === undefined || value === null) return null
   if (typeof value !== 'object' || Array.isArray(value)) return value
-  const out = {}
+  const out = Object.create(null)
   for (const key of Object.keys(value).sort()) {
     const entry = value[key]
-    out[key] = Array.isArray(entry) ? entry.map((item) => String(item)) : entry
+    out[key] = Array.isArray(entry) ? [...entry] : entry
   }
-  return out
+  return { ...out }
 }

@@ -39,6 +39,8 @@ import { assertRequestSize, imageCountOf, resolveMedia } from '../lib/media.js'
 import { buildContent, buildContextIrBody, buildGenerationBody, buildRegenerationBody } from '../lib/request.js'
 import {
   buildMediaBundle,
+  normalizeAssetIds,
+  normalizeMediaArgs,
   operationFingerprint,
   requestFingerprint,
   sanitizeRequestBody,
@@ -488,6 +490,113 @@ assert.equal(
   'asset_ids object key order must not change the plan fingerprint',
 )
 
+// --- shared nested asset-id and optional-selector normalization ----------
+const denseNativeArgs = {
+  prompt: 'P',
+  first_frame: 'a.png',
+  last_frame: '',
+  video: null,
+  reference_images: [],
+  reference_videos: null,
+  reference_audio: [],
+  asset_ids: {
+    first_frame: 'K1',
+    last_frame: '',
+    base_video: null,
+    reference_images: [],
+    reference_videos: null,
+    reference_audio: [],
+  },
+  budget_id: '',
+  project_manifest: '',
+  shot_id: '',
+  source_asset_id: '',
+  original_task_id: null,
+  source_task_id: '',
+  max_cost: 0,
+}
+const denseSnapshot = JSON.stringify(denseNativeArgs)
+const denseNormalized = normalizeMediaArgs(denseNativeArgs)
+assert.equal(JSON.stringify(denseNativeArgs), denseSnapshot, 'normalization must not mutate its input')
+assert.equal(denseNormalized.first_frame, 'a.png')
+assert.equal(denseNormalized.last_frame, undefined)
+assert.equal(denseNormalized.video, undefined)
+assert.equal(denseNormalized.reference_videos, undefined)
+assert.deepEqual(denseNormalized.asset_ids, { first_frame: 'K1' })
+assert.deepEqual(normalizeAssetIds({ unknown_slot: 'X' }, {}), { unknown_slot: 'X' }, 'unknown slots are preserved for the validator')
+assert.equal(denseNormalized.budget_id, undefined)
+assert.equal(denseNormalized.project_manifest, undefined)
+assert.equal(denseNormalized.shot_id, undefined)
+assert.equal(denseNormalized.source_asset_id, undefined)
+assert.equal(denseNormalized.original_task_id, undefined)
+assert.equal(denseNormalized.source_task_id, undefined)
+assert.equal(denseNormalized.prompt, 'P')
+assert.equal(denseNormalized.max_cost, 0, 'max_cost=0 keeps its own meaning')
+
+const sparseNativeArgs = { prompt: 'P', first_frame: 'a.png', asset_ids: { first_frame: 'K1' } }
+const sparseNormalized = normalizeMediaArgs(sparseNativeArgs)
+assert.deepEqual(denseNormalized.asset_ids, sparseNormalized.asset_ids)
+const allUnusedIds = normalizeMediaArgs({ asset_ids: { first_frame: '', last_frame: null, reference_images: [], reference_videos: null } })
+assert.equal(allUnusedIds.asset_ids, undefined, 'an all-unused id map is equivalent to omission')
+assert.deepEqual(normalizeAssetIds({ first_frame: 'K1' }, { first_frame: 'a.png' }), { first_frame: 'K1' })
+assert.deepEqual(
+  normalizeAssetIds({ first_frame: '' }, { first_frame: 'a.png' }),
+  { first_frame: '' },
+  'a used scalar slot keeps a blank id so the validator can reject it',
+)
+assert.deepEqual(
+  normalizeAssetIds({ reference_images: ['', 'K1'] }, { reference_images: ['a.png', 'b.png'] }),
+  { reference_images: ['', 'K1'] },
+  'used id arrays are never filtered or shifted',
+)
+assert.deepEqual(
+  normalizeAssetIds({ reference_images: ['K1'] }, {}),
+  { reference_images: ['K1'] },
+  'a real id without media is preserved for the without-media error',
+)
+assert.deepEqual(
+  normalizeAssetIds({ reference_images: [] }, {}),
+  undefined,
+  'an unused empty id array is dropped',
+)
+const protoArgs = JSON.parse('{"__proto__":{"polluted":true},"first_frame":"K1"}')
+const protoNormalized = normalizeAssetIds(protoArgs, { first_frame: 'a.png' })
+assert.equal(Object.hasOwn(protoNormalized, '__proto__'), true, 'unknown __proto__ slot is preserved for the validator')
+assert.deepEqual(protoNormalized.first_frame, 'K1')
+assert.equal({}.polluted, undefined, 'normalization must not pollute Object.prototype')
+assert.equal(normalizeAssetIds({ images: [] }, {}), undefined)
+assert.deepEqual(
+  normalizeAssetIds({ images: ['IMG1'] }, { images: ['a.png'] }),
+  { images: ['IMG1'] },
+  'production CLI images slot is normalized like other arrays',
+)
+assert.equal(normalizeMediaArgs({ prompt: '' }).prompt, '', 'required prompt is not relaxed')
+assert.deepEqual(
+  normalizeMediaArgs({ asset_ids: ['bad'] }).asset_ids,
+  ['bad'],
+  'wrong asset_ids type is preserved for the validator',
+)
+
+const densePlanFingerprint = operationFingerprint({
+  kind: 'generate',
+  plan: generatePlan,
+  prompt: 'A prompt.',
+  assets: bundle.assets,
+  contract: { assetIds: denseNormalized.asset_ids },
+})
+const sparsePlanFingerprint = operationFingerprint({
+  kind: 'generate',
+  plan: generatePlan,
+  prompt: 'A prompt.',
+  assets: bundle.assets,
+  contract: { assetIds: sparseNormalized.asset_ids },
+})
+assert.equal(densePlanFingerprint, sparsePlanFingerprint, 'dense/sparse valid asset ids must share the plan fingerprint')
+assert.equal(
+  requestFingerprint({ kind: 'generate', plan: generatePlan, prompt: 'A prompt.', assets: bundle.assets }),
+  requestFingerprint({ kind: 'generate', plan: generatePlan, prompt: 'A prompt.', assets: bundle.assets }),
+)
+
 assert.equal(imageCountOf({ referenceImages: ['a', 'b'] }), 2)
 assert.equal(imageCountOf({ firstFrame: 'a', lastFrame: 'b', referenceImages: [] }), 2)
 assert.ok(assertRequestSize({ content: [{ type: 'text', text: 'hello' }] }) > 0)
@@ -906,6 +1015,33 @@ function harness({ cwd = tempDir('h3-cwd-'), stateDir = tempDir('h3-state-'), co
     },
   }
 }
+/** A small real registered project (approved local character) for H3 preflight tests. */
+function makeRegisteredProjectFixture({ prefix = 'h3-project-' } = {}) {
+  const root = tempDir(prefix)
+  mkdirSync(join(root, '.ai-video'))
+  mkdirSync(join(root, 'assets'))
+  writeFileSync(join(root, 'assets', 'char1.png'), PNG)
+  writeFileSync(join(root, '.ai-video', 'project.json'), JSON.stringify({
+    schema: 'dsh.ai-video-project/1',
+    project_id: 'p-test',
+    project_root: '..',
+    budget: { id: 'project-budget', limit: 5, currency: 'CNY' },
+    policy: {},
+    assets: [{
+      id: 'char1',
+      kind: 'character',
+      path: 'assets/char1.png',
+      sha256: sha256Hex(PNG),
+      origin: 'user_supplied',
+      approval: 'approved',
+      approval_evidence: 'evidence/char1.md',
+      root_ids: [],
+    }],
+    shots: [{ id: 's1', characters: ['char1'], scenes: [], keyframes: [], dialogue: [] }],
+  }))
+  return root
+}
+
 /** A minimal stand-in production validator for H3-side byTask binding tests. */
 function mockProductionModule({ sha256, taskId }) {
   const dir = tempDir('h3-mockprod-')
@@ -1533,6 +1669,7 @@ try {
       assert.equal(record.assets.find((asset) => asset.slot === 'reference_video').duration_seconds, 5)
       const regenerated = await h.run('video_regenerate', {
         source_task_id: 'T111',
+        original_task_id: '',
         budget_id: 'b-refs',
         wait: false,
       })
@@ -1640,6 +1777,7 @@ try {
       const zeroDeclared = await h.run('video_prepare', {
         kind: 'regenerate',
         video: 'source-5s.mp4',
+        source_task_id: '',
         prompt: 'Same prompt.',
         source_duration_seconds: 0,
       })
@@ -1773,6 +1911,77 @@ try {
       assert.equal(calls.calls.length, 0)
     } finally {
       calls.restore()
+    }
+  }
+
+  // 11b. dense native asset_ids and sparse valid ids share the same plan;
+  // prepare dense -> submit sparse and the reverse both work on fresh plans.
+  {
+    const root = makeRegisteredProjectFixture()
+    const base = {
+      prompt: '[Shot 1] 小雅在窗边转身。',
+      first_frame: 'assets/char1.png',
+      shot_id: 's1',
+      source_declarations: ['own-shoot'],
+    }
+    const dense = {
+      ...base,
+      asset_ids: {
+        first_frame: 'char1',
+        last_frame: '',
+        base_video: '',
+        reference_images: [],
+        reference_videos: [],
+        reference_audio: [],
+      },
+    }
+    const sparse = { ...base, asset_ids: { first_frame: 'char1' } }
+    const flow = async (prepareDense, taskId, stateName) => {
+      const h = harness({ cwd: root, stateDir: join(root, `.state-${stateName}`) })
+      const prepared = await h.run('video_prepare', prepareDense ? dense : sparse)
+      assert.equal(prepared.status, 'prepared')
+      const calls = mockFetch(successRoute(taskId))
+      try {
+        const executed = await h.run('video_generate', {
+          ...(prepareDense ? sparse : dense),
+          plan_id: prepared.plan_id,
+          wait: false,
+        })
+        assert.equal(executed.task_id, taskId)
+        const post = calls.calls.find((call) => call.method === 'POST')
+        const apiBody = JSON.parse(post.init.body)
+        assert.equal('asset_ids' in apiBody, false, 'asset_ids is registry-only and stays out of the API body')
+        assert.equal('source_asset_id' in apiBody, false)
+      } finally {
+        calls.restore()
+      }
+    }
+    await flow(true, 'T130', 'dense-first')
+    await flow(false, 'T131', 'sparse-first')
+
+    const blank = harness({ cwd: root, stateDir: join(root, '.state-blank') })
+    const blankPrepared = await blank.run('video_prepare', {
+      ...base,
+      budget_id: '',
+      project_manifest: '',
+      asset_ids: dense.asset_ids,
+    })
+    assert.equal(blankPrepared.status, 'prepared')
+    assert.match(blankPrepared.budget, /project-budget/)
+
+    const failing = harness({ cwd: root, stateDir: join(root, '.state-invalid-id') })
+    const failedCalls = mockFetch(() => {
+      throw new Error('a real id without media must fail before network')
+    })
+    try {
+      await assert.rejects(
+        () => failing.run('video_prepare', { ...base, asset_ids: { last_frame: 'char1' } }),
+        /ASSET_ID_WITHOUT_MEDIA/,
+      )
+      assert.equal(failedCalls.calls.length, 0)
+      assert.equal(failing.credentialCalls.count, 0)
+    } finally {
+      failedCalls.restore()
     }
   }
 

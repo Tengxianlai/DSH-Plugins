@@ -254,30 +254,30 @@ function mediaProperties() {
     first_frame: {
       type: 'string',
       description:
-        'First-frame image: local path or public URL. Pins the opening frame and makes the clip image-to-video; aspect ratio follows this image. Last frame requires a first frame. Cannot be combined with reference_*.',
+        'First-frame image: local path or public URL. Pins the opening frame and makes the clip image-to-video; aspect ratio follows this image. Last frame requires a first frame. Cannot be combined with reference_*. Optional empty values are treated as not provided.',
     },
     last_frame: {
       type: 'string',
       description:
-        'Last-frame image: local path or public URL. Pins the ending frame; requires first_frame. Describe the observable path from the first to the last image, not just both images.',
+        'Last-frame image: local path or public URL. Pins the ending frame; requires first_frame. Describe the observable path from the first to the last image, not just both images. Optional empty values are treated as not provided.',
     },
     reference_images: {
       type: 'array',
       items: { type: 'string' },
       description:
-        'Up to 9 reference images (local paths or URLs). Reference identity, costume, prop, environment or style; name them <Picture 1>... in the prompt. Cannot be combined with first_frame/last_frame.',
+        'Up to 9 reference images (local paths or URLs). Reference identity, costume, prop, environment or style; name them <Picture 1>... in the prompt. Cannot be combined with first_frame/last_frame. An empty array is treated as not provided; empty entries are dropped.',
     },
     reference_videos: {
       type: 'array',
       items: { type: 'string' },
       description:
-        'Up to 3 reference clips, 2-15 s each and 15 s total, <= 50 MB each. Reference motion, camera structure or editing rhythm; name them <Video 1>... Their audio can be referenced too.',
+        'Up to 3 reference clips, 2-15 s each and 15 s total, <= 50 MB each. Reference motion, camera structure or editing rhythm; name them <Video 1>... Their audio can be referenced too. An empty array is treated as not provided; empty entries are dropped.',
     },
     reference_audio: {
       type: 'array',
       items: { type: 'string' },
       description:
-        'Up to 3 reference audio clips, 2-15 s each and 15 s total, <= 15 MB each. Reference voice timbre, music, rhythm or effect texture; name them <Audio 1>... Cannot be combined with first_frame/last_frame: for a recurring character voice use reference images plus this audio (see the skill reference continuity-and-voice.md).',
+        'Up to 3 reference audio clips, 2-15 s each and 15 s total, <= 15 MB each. Reference voice timbre, music, rhythm or effect texture; name them <Audio 1>... Cannot be combined with first_frame/last_frame: for a recurring character voice use reference images plus this audio (see the skill reference continuity-and-voice.md). An empty array is treated as not provided; empty entries are dropped.',
     },
   }
 }
@@ -318,12 +318,12 @@ function contractProperties() {
     shot_id: {
       type: 'string',
       description:
-        'Shot id in the project registry (cwd/.ai-video/project.json or project_manifest). Required when the registered project has shots.',
+        'Shot id in the project registry (cwd/.ai-video/project.json or project_manifest). Required when the registered project has shots. Empty is treated as not provided (do not send null from a native tool call).',
     },
     project_manifest: {
       type: 'string',
       description:
-        'Explicit path to an AI-video project manifest, overriding automatic discovery. Registered projects require local, hash-verifiable, approved inputs.',
+        'Explicit path to an AI-video project manifest, overriding automatic discovery. Registered projects require local, hash-verifiable, approved inputs. Empty is treated as not provided (do not send null from a native tool call).',
     },
     keyframe_override_reason: {
       type: 'string',
@@ -339,27 +339,27 @@ function assetIdProperties({ includeBaseVideo = false, includeSourceAsset = fals
       type: 'object',
       additionalProperties: false,
       description:
-        'Explicit registered-project asset id per media slot, e.g. {"reference_images":["char1"],"first_frame":"kf1"}. Used only for registry approval/QC binding and plan approval; it never changes the API body.',
+        'Explicit registered-project asset id per media slot, e.g. {"reference_images":["char1"],"first_frame":"kf1"}. Native full-field serialization may carry unused slots as empty strings/arrays; those are ignored by the shared normalizer, while real ids without media and used-slot type/length errors stay strict. Do not send null from a native tool call (the strict SDK rejects null before the handler). Used only for registry approval/QC binding and plan approval; it never changes the API body.',
       properties: {
-        first_frame: { type: 'string', description: 'Registered asset id for first_frame.' },
-        last_frame: { type: 'string', description: 'Registered asset id for last_frame.' },
+        first_frame: { type: 'string', description: 'Registered asset id for first_frame. An empty unused slot is ignored.' },
+        last_frame: { type: 'string', description: 'Registered asset id for last_frame. An empty unused slot is ignored.' },
         reference_images: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Registered asset ids aligned with reference_images.',
+          description: 'Registered asset ids aligned with reference_images. An empty unused array is ignored; used arrays are never filtered.',
         },
         reference_videos: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Registered asset ids aligned with reference_videos.',
+          description: 'Registered asset ids aligned with reference_videos. An empty unused array is ignored; used arrays are never filtered.',
         },
         reference_audio: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Registered asset ids aligned with reference_audio.',
+          description: 'Registered asset ids aligned with reference_audio. An empty unused array is ignored; used arrays are never filtered.',
         },
         ...(includeBaseVideo
-          ? { base_video: { type: 'string', description: 'Registered asset id for the base_video slot.' } }
+          ? { base_video: { type: 'string', description: 'Registered asset id for the base_video slot. An empty unused slot is ignored.' } }
           : {}),
       },
     },
@@ -368,7 +368,7 @@ function assetIdProperties({ includeBaseVideo = false, includeSourceAsset = fals
           source_asset_id: {
             type: 'string',
             description:
-              'Registered 768P source-video asset id for source_task_id regeneration. The local journal download hash must match its approved sha256; otherwise registered byTask regeneration is refused and the video mode is suggested. Registry/QC binding only, not an API body field.',
+              'Registered 768P source-video asset id for source_task_id regeneration. The local journal download hash must match its approved sha256; otherwise registered byTask regeneration is refused and the video mode is suggested. Registry/QC binding only, not an API body field. Empty is treated as not provided (do not send null from a native tool call).',
           },
         }
       : {}),
@@ -1398,7 +1398,7 @@ export function apply(ctx, config) {
           ? null
           : { id: prep.production.project.id ?? null, manifest: prep.production.project.manifest ?? null },
       shot: prep.production?.shot === null || prep.production?.shot === undefined ? null : { id: prep.production.shot.id },
-      contract: contractRecord(args, prep.contract?.approvedSources),
+      contract: contractRecord(normalizeMediaArgs(args), prep.contract?.approvedSources),
       out_dir: outDir ?? null,
       stem: stem ?? null,
       duration_context: prep.durationContext ?? null,
@@ -1907,7 +1907,7 @@ export function apply(ctx, config) {
       },
       out_dir: outProperty,
       ...contractProperties(),
-      ...assetIdProperties(),
+      ...assetIdProperties({ includeBaseVideo: true }),
       ...planProperties(),
       ...safetyProperties(),
       ...overrideProperties(),

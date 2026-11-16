@@ -8,6 +8,7 @@ import {
   validateRegenSourceSpec,
   validateReviewRecord,
 } from './schema/validate.js'
+import { normalizeMediaArgs } from '../lib/assets.js'
 
 export const PROJECT_SCHEMA = 'dsh.ai-video-project/1'
 export const ORIGINS = new Set(['generated_original', 'video_frame', 'external_capture', 'user_supplied', 'derived_render'])
@@ -240,6 +241,10 @@ export function validateProductionInputs({
   auditAll = verifyAll,
 } = {}) {
   if (!isObject(args)) args = {}
+  // One shared normalization path for H3 prepare/generate/regenerate, the
+  // direct validator and the CLI: native full-field serialization may carry
+  // unused slots as null/""/[] and nested asset_ids must not fail on them.
+  args = normalizeMediaArgs(args)
   const promptText = prompt === undefined ? args.prompt : prompt
   const loaded = loadProject({ cwd, manifest: args.project_manifest })
   if (!loaded) {

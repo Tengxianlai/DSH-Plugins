@@ -19,13 +19,23 @@
 | 部分 | 版本 | 行为 |
 |---|---|---|
 | dsh-image-gen | 0.4.0 | 离线预演、required/hash参考契约、真实输入输出收据、并发防覆盖、原2K/4K费用门保留 |
-| dsh-minimax-video | 0.2.0 | 7工具、计划与累计预算、可恢复journal、来源/原句/QC/源规格检查、生产CLI与新项目技能 |
+| dsh-minimax-video | 0.2.1 | 7工具、计划与累计预算、可恢复journal、来源/原句/QC/源规格检查；兼容登记项目未用asset_ids空占位，附生产CLI与新项目技能 |
 | dsh-gemini | 0.4.0 | 本地技术QA优先、音视频目的/证据预检、默认不扩大预算重试、逐次usage累计与未知量标记 |
 | dsh-gemini-creative | 0.4.0 | 写作分工与必要综合判断边界，链接新项目生产技能 |
 
 托管安装对已安装link包返回 `already-installed`。随后托管 `set_bundle` 对H3及image各执行disable→enable，均返回 `application:applied`；没有移除包、手写profile或重启DSH进程。当前目录可发现 `ai-video-production` 并实际加载；plugin-manager核查四个目标fiber均active。
 
 运行态离线烟测：Lite768/4s/disabled扩展参数准备成功，估价¥1.04，上限¥1.04，明确 `no paid call was made`；该plan不执行。生图2K/16:9预演成功，解析2048×1152，明确无请求无扣费，收据仅在ignored `.work/runtime-smoke-images/`。预检中的价格是目录估计，未成为生成授权。
+
+## 0.2.1 补丁：登记项目的空素材ID（当晚）
+
+用户实际v06调用暴露遗漏：顶层空媒体已清除，嵌套 `asset_ids.last_frame/base_video:''` 却仍被当成声明，因此重复报ID为空及有ID无媒体。此前无登记项目的现场烟测提前返回，没有覆盖这一组合。
+
+现由共享纯归一化接入H3准备、执行、再生成及登记校验/CLI；忽略未使用槽位的空ID/空数组，并统一可选预算、项目及源任务选择器。实际ID无媒体、已用ID数组错位/空项、来源哈希与歧义门保留；准备完整对象与执行稀疏对象（及反向）均有mock回归，付费请求去重规则未改。
+
+独立DeepSeek复核通过。全仓9插件通过，生产48/48、0跳过，包含真实本地ASR，验证期间及之后源码无漂移：[0.2.1验收记录](integration/ASSET_BINDING_021_VERIFY.json)、[原始日志](integration/ASSET_BINDING_021_VERIFY.log)。托管disable→enable均applied；真实v06已批准首帧加完整空槽位及空预算ID的native `video_prepare`通过；填真实ID但不给媒体的反例仍拒。详见[运行态证据](integration/ASSET_BINDING_021_RUNTIME.json)。测试plan不执行，不提交新视频，不改v06素材、登记表或预算上限。
+
+原生工具空占位用 `''`/`[]` 或省略；不要改传 `null`，现行SDK参数类型校验会先拒绝。CLI/direct可处理null。当前piTool路径使用默认strict:false；严格schema转换的required行为是兼容性检查，不是已证实的本次会话报错原因。工具参数DSL结构保持原样，无oneOf扩张。
 
 ## 长期本地ASR
 

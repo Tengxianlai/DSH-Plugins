@@ -1,0 +1,26 @@
+{
+  "schema": "dsh.ai-video-runtime-compat-verification/1",
+  "date": "2026-11-16",
+  "plugin": "dsh-minimax-video",
+  "version": "0.2.1",
+  "profile": "web",
+  "managed_reload": {"disable": "applied", "enable": "applied", "process_restart": false},
+  "existing_task_status_queries": 3,
+  "existing_tasks_before_reload": "all observed tasks succeeded",
+  "project": "tanlu-motion-v06-scheme-a-20261116",
+  "shot": "CAR_A1",
+  "input_asset": "SA_KF_CAR_A1",
+  "checks": [
+    {"name": "registered native full-field empty slots", "tool": "video_prepare", "input": "real approved first frame; last_frame/video empty; unused scalar asset ids empty; unused array asset ids []; budget_id empty", "result": "prepared", "model": "MiniMax-H3-Lite", "resolution": "768P", "duration": 4, "estimate_cny": 1.04, "max_cost_cny": 1.04, "plan_id": "p-mwjffzz6-2554cb", "plan_expires_at": "2026-11-16T16:07:22.914Z", "plan_executed": false, "paid_call_made": false},
+    {"name": "nonempty ids without media still fail", "tool": "video_prepare", "input": "real registered id in last_frame and base_video but no media in either slot", "result": "rejected", "errors": ["ASSET_ID_WITHOUT_MEDIA:last_frame", "ASSET_ID_WITHOUT_MEDIA:base_video"], "paid_call_made": false},
+    {"name": "local registered validator variants", "variants": ["sparse", "empty strings and arrays", "null via direct validator", "whitespace"], "result": "all zero issues", "real_id_without_media_rejected": true, "mismatched_asset_hash_rejected": true, "project_writes": 0, "network_calls": 0}
+  ],
+  "native_null_boundary": "Native DSH parameter validation still rejects null; use omission, empty strings or empty arrays as described. Null normalization is available to CLI/direct callers, not an expansion of the native tool schema.",
+  "strict_sampling": "Current piTool path does not request strict sampling; its default is strict:false. Strict-schema conversion was independently tested for compatibility, not claimed as the active cause of this incident.",
+  "new_video_submissions": 0,
+  "v06_media_changed": false,
+  "project_manifest_changed": false,
+  "existing_budget_limit_changed": false,
+  "smoke_plan_budget_reservation": 0,
+  "verification_limit": "No paid generation or regeneration was submitted to test this repair. Prepare/execute equivalence and refusal paths use offline mocks; live verification is the real native offline preflight."
+}

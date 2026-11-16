@@ -227,6 +227,12 @@ unknown 永不自动释放。项目 manifest 的 `budget:{id,limit,currency}` �
 - 项目有 `budget:{id,limit,currency}` 时自动绑定；调用不能换预算/抬上限。
 - 工具显式提供 `asset_ids`（槽位→注册资产 id；数组槽位传数组）与 `source_asset_id`（`source_task_id`
   再生成的已登记 768P 源）。二者只进入 plan 指纹，不进入 API body/request 指纹。
+  原生工具接口会序列化所有字段：未用槽位的空串/`[]` 视为未提供并由共享 normalizer 归一化；
+  真实非空 ID 无媒体、数组长度错位/空项/类型错误、未知槽位仍严格报错，归一化从不 filter 已用 ID 数组。
+  可选 `budget_id`/`project_manifest`/`shot_id`/`source_asset_id`/`original_task_id`/`source_task_id`
+  的空串同样视为未提供；`prompt`、`max_cost=0` 语义不变。
+  **native 工具调用不要发 null**：严格 SDK 在 handler 前拒绝 null；CLI/direct validator 的 null 由
+  normalizer 兼容。`__proto__` 等未知槽位不会被吞掉，仍交给 validator 报错。
 - 登记项目的 `source_task_id` 再生成必须能用本地 `journal.download.sha256` 证明 `source_asset_id`
   与该远端 task 的下载对应；无本地记录、无下载 hash、hash 不符或 task_id 不符都会拒绝，并建议改用
   `video` 模式。普通无 registry 的 API 用途不受此限制，仍走 worst-case 预算。

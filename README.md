@@ -11,7 +11,7 @@ profile 上；挂载行写在插件自己的 `cordis.patch.yml` 里，profile �
 | `dsh-playwright-per-agent` | 0.2.0 | host | 在每个根 agent 上下文里挂 Playwright MCP |
 | `dsh-session-id` | 0.2.0 | host + web | 会话标题栏显示当前 session id；点击复制带说明的三行（会话 ID / 存储目录＝日志所在 / 工作目录），粘贴即可让其他会话去读日志 |
 | `dsh-image-gen` | 0.4.0 | host | 生图/改图，保留2K/4K费用保护；新增离线预演、required/hash参考契约、输入/输出收据与并发防覆盖 |
-| `dsh-minimax-video` | 0.2.0 | host | H3七个工具：离线准备、累计预算、可恢复任务与原始输入追溯；附跨项目资产登记、本地QA及两项生产技能 |
+| `dsh-minimax-video` | 0.2.1 | host | H3七个工具：离线准备、累计预算、可恢复任务与原始输入追溯；登记项目兼容未用素材ID空占位，附跨项目资产登记、本地QA及两项生产技能 |
 | `dsh-gemini` | 0.4.0 | host | Gemini 4 Argon文学写作与必要综合判断；本地技术QA优先，媒体目的/证据预检、默认不自动加预算重试、逐次累计用量 |
 | `dsh-gemini-creative` | 0.4.0 | host | 写剧本/对白/文案及必要素材对照；技术证据由本地工具与子代理整理，新项目先登记批准资产 |
 | `dsh-claude` | 0.1.0 | host | Claude Opus 5.5 外场专家：难题、多次被反驳、卡住或用户点名时的第二意见；图片/PDF/文本，扩展推理与提示缓存默认开启 |
