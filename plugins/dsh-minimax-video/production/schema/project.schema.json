@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dsh.ai-video-project/1",
+  "title": "AI video project manifest",
+  "type": "object",
+  "required": ["schema", "project_id", "assets", "shots"],
+  "properties": {
+    "schema": { "const": "dsh.ai-video-project/1" },
+    "project_id": { "type": "string", "minLength": 1 },
+    "project_root": { "type": "string" },
+    "budget": {
+      "type": ["object", "null"],
+      "required": ["id", "limit", "currency"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "limit": { "type": "number", "exclusiveMinimum": 0 },
+        "currency": { "enum": ["CNY", "USD"] },
+        "authorization_evidence": { "type": "string" },
+        "authority": { "type": "string" },
+        "declared_not_independently_verified": { "type": "boolean" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "require_budget": { "type": "boolean" },
+        "allow_external_assets": { "type": "boolean" },
+        "archived_sources": { "enum": ["warn", "reject", "allow"] },
+        "regeneration_requires_qc": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "path", "sha256", "approval", "origin"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["character", "scene", "keyframe", "image", "video", "audio"] },
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+          "approval": { "enum": ["candidate", "approved", "user_approved", "director_approved", "agent_approved", "locked"] },
+          "approval_evidence": { "type": "string" },
+          "authority": { "const": "declared" },
+          "origin": { "enum": ["generated_original", "video_frame", "external_capture", "user_supplied", "derived_render"] },
+          "shot_id": { "type": "string" },
+          "task_id": { "type": "string" },
+          "provenance": { "type": "object" },
+          "root_ids": { "type": "array", "items": { "type": "string" } },
+          "archived": { "type": "boolean" },
+          "archive_adoption": { "type": "object" },
+          "qc": { "type": "object" },
+          "qc_history": { "type": "array" },
+          "approval_history": { "type": "array" }
+        }
+      }
+    },
+    "shots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "characters": { "type": "array", "items": { "type": "string" } },
+          "scenes": { "type": "array", "items": { "type": "string" } },
+          "keyframes": { "type": "array", "items": { "type": "string" } },
+          "required_assets": { "type": "array", "items": { "type": "string" } },
+          "voice_refs": { "type": "array", "items": { "type": "string" } },
+          "dialogue": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "required": ["line"],
+                  "properties": { "speaker": { "type": "string" }, "line": { "type": "string" } }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "history": { "type": "array" }
+  }
+}

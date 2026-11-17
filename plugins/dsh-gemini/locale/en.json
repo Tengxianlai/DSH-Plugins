@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Gemini text",
-    "description": "Write scripts, revise drafts, and analyze long text with Gemini 4. The request carries only this plugin's writing instruction, never the Harness identity block, and returns plain text.",
+    "description": "Write scripts, revise drafts, analyze long text, or give an integrated judgement on scene images and a short clip with Gemini 4 Argon; technical checks such as ASR, frame scanning, and ffprobe/decode stay with local tools and subagents. The request carries no Harness identity block and returns plain text.",
     "detail": "docs/DETAIL.md"
   }
 }

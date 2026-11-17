@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dsh.ai-video-references/2",
+  "title": "References exported for one shot, hash-bound and required-root aware",
+  "type": "object",
+  "required": ["schema", "project", "shot_id", "mode", "references", "required_root_ids", "coverage", "authority"],
+  "properties": {
+    "schema": { "const": "dsh.ai-video-references/2" },
+    "project": { "type": ["string", "null"] },
+    "shot_id": { "type": "string", "minLength": 1 },
+    "mode": { "enum": ["keyframe_derived", "explicit"] },
+    "authority": { "const": "declared" },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "role", "required", "path", "sha256", "sha256_matches", "approval", "origin"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["character", "scene", "keyframe", "image", "video", "audio"] },
+          "role": { "enum": ["identity_root", "scene_card", "keyframe", "reference", "voice"] },
+          "required": { "type": "boolean" },
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+          "sha256_matches": { "const": true },
+          "approval": { "type": "string" },
+          "origin": { "type": "string" },
+          "root_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "required_root_ids": { "type": "array", "items": { "type": "string" } },
+    "coverage": {
+      "type": "object",
+      "required": ["required", "covered"],
+      "properties": {
+        "required": { "type": "array", "items": { "type": "string" } },
+        "covered": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "note": { "type": "string" }
+  }
+}

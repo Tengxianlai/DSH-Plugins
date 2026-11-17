@@ -1,8 +1,8 @@
 {
   "name": "dsh-session-id",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "DSH Web 会话标题栏显示当前会话 ID（截断显示），点击复制完整 session id。",
+  "description": "DSH Web 会话标题栏显示当前会话 ID（截断显示），点击复制完整 session id、该会话的磁盘存储目录与工作目录。",
   "type": "module",
   "icon": "icon.svg",
   "main": "index.js",

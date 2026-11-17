@@ -6,10 +6,30 @@
  * snapshot here and the README together. The plugin never derives a price from
  * a request, because both providers bill by their own rules (GPT per delivered
  * image tier, MiniMax by tokens with prompt-enhancement included).
+ *
+ * GPT tiers are the one place where the public price page and the account
+ * statement disagree: TeamoRouter still advertises a flat $0.02/image for GPT
+ * Image 2.6, but a 4K delivery is billed at about ¥0.60 on this account
+ * (user-confirmed 2026-11-15). The catalog therefore quotes the observed CNY
+ * amount (1K = 2K = ¥0.18, 4K = ¥0.60) instead of the advertised USD figure.
+ * Under-quoting 4K is what made callers treat it as free; over-quoting it only
+ * makes them choose 2K, which is the safe side.
  */
 
 /** Date of the price snapshot shown by `image_models` and the README. */
-export const PRICE_AS_OF = '2026-11-14'
+export const PRICE_AS_OF = '2026-11-15'
+
+/**
+ * GPT per-delivered-image tiers in CNY, as reported for this account.
+ * 1K and 2K are the same price on purpose: 2K is the default and the only
+ * sensible choice unless 4K detail is actually required.
+ */
+export const GPT_TIER_PRICES_CNY = Object.freeze({ '1K': 0.18, '2K': 0.18, '4K': 0.60 })
+
+/** Per-provider `size` used when the caller omits it. */
+export function defaultSizeFor(provider) {
+  return provider === 'gpt' ? '2k' : '1k'
+}
 
 /** MiniMax 4K launch promo: 50% off a delivered image of at least 16.6MP. */
 export const MINIMAX_4K_PROMO = Object.freeze({
@@ -49,9 +69,9 @@ export const PROVIDERS = {
       promptMaxChars: 32_000,
       promptEnhancement: false,
       sizeSummary:
-        '1k/2k/4k tiers (longest side 1024/2048/3840) or WIDTHxHEIGHT: sides multiples of 16, longest <= 3840, total 655,360-8,294,400 px',
+        'billing tiers 1k/2k/4k (delivered longest side 1024/2048/3840; default 2k) or WIDTHxHEIGHT: sides multiples of 16, longest <= 3840, total 655,360-8,294,400 px',
       priceSummary:
-        'per image; tier follows the delivered image longest side (<=1024 1K, <=2048 2K, >2048 4K)',
+        'per delivered image, CNY: 1K/2K ¥0.18, 4K ¥0.60; tier follows the delivered image longest side (<=1024 1K, <=2048 2K, >2048 4K)',
     },
   },
   minimax: {
@@ -80,19 +100,16 @@ export const PROVIDERS = {
   },
 }
 
-const GPT_LIST_TIERS = Object.freeze({ '1k': 0.2, '2k': 0.2, '4k': 0.2 })
-
-/** Per-image TeamoRouter price for one GPT model. */
-function gptPerImage(tiers) {
+/** Per-image TeamoRouter price for one GPT model (tiers are shared). */
+function gptPerImage() {
   return {
-    currency: 'USD',
+    currency: 'CNY',
     mode: 'per_image',
-    tiers,
-    listTiers: GPT_LIST_TIERS,
+    tiers: GPT_TIER_PRICES_CNY,
   }
 }
 
-/** Token-billed TeamoRouter price for one Gemini image model. */
+/** Token-billed TeamoRouter price for one Gemini image model (USD per MTok). */
 function geminiToken(inputPerMTok, outputPerMTok, listInputPerMTok, listOutputPerMTok) {
   return {
     currency: 'USD',
@@ -131,71 +148,76 @@ export const MODELS = Object.freeze([
     id: 'gpt-image-2.6-sunburst',
     provider: 'gpt',
     label: 'GPT Image 2.6 Sunburst',
-    note: 'default; fine detail and instruction following',
-    pricing: gptPerImage({ '1k': 0.02, '2k': 0.02, '4k': 0.02 }),
+    note: 'best detail and instruction following',
+    pricing: gptPerImage(),
   },
   {
     id: 'gpt-image-2.6-flare',
     label: 'GPT Image 2.6 Flare',
     provider: 'gpt',
     note: 'faster iteration',
-    pricing: gptPerImage({ '1k': 0.02, '2k': 0.02, '4k': 0.02 }),
+    pricing: gptPerImage(),
   },
   {
     id: 'gpt-image-2.5-sunburst',
     provider: 'gpt',
     label: 'GPT Image 2.5 Sunburst',
     note: 'previous generation',
-    pricing: gptPerImage({ '1k': 0.02, '2k': 0.0204, '4k': 0.0868 }),
+    pricing: gptPerImage(),
   },
   {
     id: 'gpt-image-2.5-flare',
     provider: 'gpt',
     label: 'GPT Image 2.5 Flare',
     note: 'previous generation, faster',
-    pricing: gptPerImage({ '1k': 0.02, '2k': 0.02, '4k': 0.0858 }),
+    pricing: gptPerImage(),
   },
   {
     id: 'gpt-image-2',
     provider: 'gpt',
     label: 'GPT Image 2',
     note: 'older generation',
-    pricing: gptPerImage({ '1k': 0.02, '2k': 0.02, '4k': 0.0858 }),
+    pricing: gptPerImage(),
   },
   {
     id: 'gpt-image-2.6-sunburst-4k-upscale',
     provider: 'gpt',
     label: 'GPT Image 2.6 Sunburst 4K Upscale',
-    note: '4K detail variant',
-    pricing: gptPerImage({ '1k': 0.02, '2k': 0.02, '4k': 0.02 }),
+    note: 'always outputs and bills 4K',
+    always4k: true,
+    pricing: gptPerImage(),
   },
   {
     id: 'gpt-image-2.6-flare-4k-upscale',
     provider: 'gpt',
     label: 'GPT Image 2.6 Flare 4K Upscale',
-    note: '4K detail variant, faster',
-    pricing: gptPerImage({ '1k': 0.02, '2k': 0.02, '4k': 0.02 }),
+    note: 'faster, always outputs and bills 4K',
+    always4k: true,
+    pricing: gptPerImage(),
   },
   {
     id: 'gpt-image-2.5-sunburst-4k-upscale',
     provider: 'gpt',
     label: 'GPT Image 2.5 Sunburst 4K Upscale',
-    note: 'previous generation 4K detail variant',
-    pricing: gptPerImage({ '1k': 0.02, '2k': 0.02, '4k': 0.02 }),
+    note: 'previous generation, 4K-only',
+    always4k: true,
+    pricing: gptPerImage(),
   },
   {
     id: 'gpt-image-2.5-flare-4k-upscale',
     provider: 'gpt',
     label: 'GPT Image 2.5 Flare 4K Upscale',
-    note: 'previous generation 4K detail variant',
-    pricing: gptPerImage({ '1k': 0.02, '2k': 0.02, '4k': 0.02 }),
+    note: 'previous generation, 4K-only',
+    always4k: true,
+    pricing: gptPerImage(),
   },
   {
     id: 'gpt-image-2-4k-upscale',
     provider: 'gpt',
     label: 'GPT Image 2 4K Upscale',
-    note: 'older generation 4K detail variant',
-    pricing: gptPerImage({ '1k': 0.02, '2k': 0.02, '4k': 0.02 }),
+    note: 'older generation, 4K-only',
+    always4k: true,
+    pricing: gptPerImage(),
   },
   {
     id: 'gemini-3-pro-image',
@@ -289,10 +311,16 @@ const ceil16 = (n) => Math.max(STEP, Math.ceil(n / STEP) * STEP)
 const round16 = (n) => Math.max(STEP, Math.round(n / STEP) * STEP)
 const floor16 = (n) => Math.max(STEP, Math.floor(n / STEP) * STEP)
 
-/** Billing tier of a delivered GPT size: by longest side, per the gateway rules. */
+/**
+ * Billing tier of a delivered GPT size: by longest side, per the gateway rules.
+ * Returns undefined for anything that is not a WIDTHxHEIGHT pair, so a
+ * provider-reported "auto" can never be mistaken for the 4K tier.
+ */
 export function billingTierOfSize(size) {
-  const [w, h] = size.split('x').map(Number)
-  const longest = Math.max(w, h)
+  if (typeof size !== 'string') return undefined
+  const match = /^(\d+)x(\d+)$/.exec(size.trim())
+  if (match === null) return undefined
+  const longest = Math.max(Number(match[1]), Number(match[2]))
   if (longest <= 1024) return '1K'
   if (longest <= 2048) return '2K'
   return '4K'
@@ -401,9 +429,12 @@ function minimaxExplicitSize(value) {
  * shape:
  *   GPT      -> exact `size` (billing tier follows the delivered longest side)
  *   MiniMax  -> `area` + `aspectRatio` for a tier, or exact `size` when given
+ *
+ * An omitted size uses the provider default: 2k for GPT (1K and 2K cost the
+ * same, so 2K is strictly better) and 1k for MiniMax (cheapest).
  */
 export function planSize(provider, size, aspect = '1:1') {
-  const tier = (size ?? '1k').trim().toLowerCase()
+  const tier = (size ?? defaultSizeFor(provider)).trim().toLowerCase()
   if (!ASPECTS.includes(aspect)) {
     throw new Error(`aspect must be one of ${ASPECTS.join(', ')} (got "${aspect}")`)
   }
@@ -421,6 +452,59 @@ export function planSize(provider, size, aspect = '1:1') {
   }
   const exact = gptExplicitSize(tier)
   return { size: exact, billingTier: billingTierOfSize(exact) }
+}
+
+/**
+ * Plan a request size while protecting the caller from an accidental 4K bill.
+ *
+ * Two rules:
+ *   1. `*-4k-upscale` models always deliver 4K, so they only accept size "4k".
+ *   2. An explicit GPT WIDTHxHEIGHT whose longest side exceeds 2048 is billed
+ *      as 4K (about ¥0.60 instead of ¥0.18). That is exactly how "give me 2K"
+ *      turns into a 4K charge when the caller writes 2560x1440, so such a size
+ *      is refused unless the caller opts in with `allow_4k`.
+ */
+export function planBilledSize({ provider, entry, size, aspect = '1:1', allow4k = false }) {
+  const fallback = entry?.always4k === true ? '4k' : defaultSizeFor(provider)
+  const requested = (size ?? fallback).trim().toLowerCase()
+
+  if (entry?.always4k === true) {
+    if (requested !== '4k') {
+      const base = entry.id.replace(/-4k-upscale$/, '')
+      throw new Error(
+        `${entry.id} is a 4K-only model: it always outputs and bills 4K (~¥${GPT_TIER_PRICES_CNY['4K'].toFixed(2)}). ` +
+          `Pass size:"4k", or use ${base} when you want 2K.`,
+      )
+    }
+    return planSize(provider, '4k', aspect)
+  }
+
+  const plan = planSize(provider, requested, aspect)
+
+  if (
+    provider === 'gpt' &&
+    entry?.pricing?.mode === 'per_image' &&
+    !TIER_KEYS.includes(requested) &&
+    plan.billingTier === '4K' &&
+    allow4k !== true
+  ) {
+    const twoK = planSize('gpt', '2k', aspect)
+    const longest = Math.max(...plan.size.split('x').map(Number))
+    throw new Error(
+      `size ${plan.size} is billed as 4K (~¥${GPT_TIER_PRICES_CNY['4K'].toFixed(2)}/image), not 2K: ` +
+        `the longest side ${longest} exceeds 2048. ` +
+        `For 2K pass size:"2k" with aspect:"${aspect}" (${twoK.size}). ` +
+        `To request this exact 4K size on purpose, set allow_4k:true or pass size:"4k".`,
+    )
+  }
+
+  return plan
+}
+
+/** Estimated CNY cost of one delivered image, when the model is per-image. */
+export function costCnyFor(entry, billingTier) {
+  if (entry?.pricing?.mode !== 'per_image' || billingTier === undefined) return undefined
+  return entry.pricing.tiers[billingTier.toUpperCase()]
 }
 
 /** Reject blank or oversized prompts before spending a request. */
@@ -482,35 +566,45 @@ export function catalogText() {
   lines.push('Pick a provider + model for image_generate; an omitted model uses the provider default.')
   lines.push('')
 
+  lines.push('GPT BILLING TIERS (per delivered image, CNY) -- decide this before the model')
+  lines.push('  1K  delivered longest side <= 1024   ¥0.18')
+  lines.push('  2K  delivered longest side <= 2048   ¥0.18   <- same price as 1K; default')
+  lines.push('  4K  delivered longest side >  2048   ¥0.60   <- ~3.3x 2K; only when 4K is required')
+  lines.push('  2560x1440 is 4K billing (longest side 2560), NOT 2K. For 2K 16:9 use 2048x1152.')
+  lines.push('  Pass size:"2k" + aspect instead of computing pixels; an explicit GPT size above')
+  lines.push('  2048 is refused unless allow_4k:true. *-4k-upscale models are 4K-only.')
+  lines.push('')
+
   lines.push('gpt — TeamoRouter (GPT Image 2.x; Gemini image models share this backend)')
   lines.push(
     `  key: ${PROVIDERS.gpt.keyRef}; text-to-image + edit/combine; 1-16 refs; n 1-4; ` +
       `quality auto/low/medium/high; ${FORMATS.join('/')}`,
   )
   lines.push(
-    '  size: 1k/2k/4k (longest 1024/2048/3840) or WIDTHxHEIGHT. 4K is capped at 8.29MP: ' +
-      '4K 1:1 = 2880x2880, 4K 16:9 = 3840x2160. 1K 16:9/9:16 cannot reach the 655,360px ' +
-      'minimum within 1024px, so they render 1088x608 / 608x1088 and bill as 2K.',
+    '  size: 1k/2k/4k (delivered longest 1024/2048/3840) or WIDTHxHEIGHT. 4K is capped at ' +
+      '8.29MP: 4K 1:1 = 2880x2880, 4K 16:9 = 3840x2160. 1K 16:9/9:16 cannot reach the ' +
+      '655,360px floor within 1024px, so they render 1088x608 / 608x1088 and bill as 2K ' +
+      '(same price, so no loss).',
   )
   lines.push('  format: png/jpeg/webp requested; GPT 2.6 currently returns PNG even when jpeg is requested.')
-  lines.push('  models (USD/image; TeamoRouter rate -> list):')
+  lines.push('  models (per-image price = the tier table above; model choice is quality/speed):')
   for (const entry of GPT_MODELS) {
     const marker = entry.id === PROVIDERS.gpt.defaultModel ? ' (default)' : ''
     if (entry.pricing.mode === 'per_image') {
-      const tiers = TIER_KEYS.map((key) => `${key.toUpperCase()} $${usd(entry.pricing.tiers[key])}`).join(' / ')
-      const lists = [...new Set(TIER_KEYS.map((key) => entry.pricing.listTiers[key]))]
-      const listText = lists.length === 1 ? `$${lists[0].toFixed(2)}` : lists.map((value) => `$${usd(value)}`).join('/')
-      lines.push(`    ${entry.id}${marker}: ${tiers} (list ${listText})`)
+      const only4k = entry.always4k === true ? ' [4K-only]' : ''
+      lines.push(`    ${entry.id}${marker}${only4k}: ${entry.note}`)
     } else {
       lines.push(
         `    ${entry.id}${marker}: token $${usd(entry.pricing.inputPerMTok)}/M input, ` +
           `$${usd(entry.pricing.outputPerMTok)}/M output ` +
-          `(list $${usd(entry.pricing.listInputPerMTok)}/$${usd(entry.pricing.listOutputPerMTok)})`,
+          `(list $${usd(entry.pricing.listInputPerMTok)}/$${usd(entry.pricing.listOutputPerMTok)}); ` +
+          `${entry.note}`,
       )
     }
   }
   lines.push(
-    '  GPT billing: per delivered image, tier by longest side; Gemini models are token-billed.',
+    '  GPT per-image billing: per delivered image, tier by delivered longest side; ' +
+      'Gemini models are token-billed instead.',
   )
   lines.push('')
 
@@ -555,15 +649,18 @@ export function catalogText() {
   )
   lines.push('')
 
+  lines.push('Comparison (2026-11-15, CNY):')
   lines.push(
-    'Comparison (2026-11-14): GPT 4K is $0.02/img at 8.29MP max; MiniMax standard 4K is ' +
-      '¥0.2261 promo (~$0.032) / ¥0.4522 list (~$0.064) at 16.8MP. 1K/2K are close: ' +
-      'GPT $0.02 vs MiniMax standard ¥0.1430-0.1531 (~$0.020-0.022). Highspeed is ~1.5-2x ' +
-      'standard and faster. USD approximations use ¥7.1/$ and are illustrative only.',
+    '  2K: GPT ¥0.18 vs MiniMax standard ~¥0.15 -- close; pick GPT for detail/instruction following.',
   )
   lines.push(
-    `Prices change; verify ${PRICE_SOURCES.teamorouter} and ${PRICE_SOURCES.minimax}. ` +
-      `The MiniMax 4K promo ends ${MINIMAX_4K_PROMO.until}.`,
+    '  4K: GPT ¥0.60 vs MiniMax standard ¥0.2261 promo / ¥0.4522 list at 16.8MP -- MiniMax is much ' +
+      'cheaper for 4K, so use MiniMax when 4K pixels are the goal.',
+  )
+  lines.push('  1K on GPT is pointless: 2K costs the same and has 4x the pixels.')
+  lines.push(
+    `Public list: ${PRICE_SOURCES.teamorouter} (may still show the old flat $0.02 and lag the ` +
+      `account bill) and ${PRICE_SOURCES.minimax}. The MiniMax 4K promo ends ${MINIMAX_4K_PROMO.until}.`,
   )
   return lines.join('\n')
 }

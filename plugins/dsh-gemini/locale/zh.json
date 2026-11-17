@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Gemini 文本",
-    "description": "用 Gemini 4 写剧本、改稿、分析长文。请求只带插件自带的写作指令，不经过 Harness 身份段，输出纯文本。",
+    "description": "用 Gemini 4 Argon 写剧本、改稿、分析长文，或在需要时综合判断场景图与短片；ASR、逐帧扫描、ffprobe/解码等技术质检交给本地工具与子代理。请求不经过 Harness 身份段，输出纯文本。",
     "detail": "docs/DETAIL.md"
   }
 }

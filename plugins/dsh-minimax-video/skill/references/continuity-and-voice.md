@@ -1,6 +1,8 @@
 # Continuity and voice across clips
 
-H3 outputs one 4–15 s clip per call, so a scene often spans several calls. Two kinds of continuity pull in opposite directions:
+H3 outputs one 4–15 s clip per call, so a scene often spans several calls. Select the approved same-shot keyframe and its character/scene lineage first. A video screenshot is an exception for an actual continuation state: explain the need and inspect the frame before submission. This page describes the available continuity modes; it does not make tail-frame chaining the default.
+
+Two kinds of continuity pull in opposite directions:
 
 | What must stay consistent | Mechanism | Billing |
 |---|---|---|
@@ -76,8 +78,8 @@ If the exchange fits 15 s, keep it in one generation. Then there is no cross-cli
 
 A voice reference is only as good as the sample:
 
-- One clean **3–10 s** recording per character. No music, no reverb, one mic, same language and accent as the target line.
-- Use the **same file** on every clip of that character. Do not use a previous clip's line: it is short and already acted.
+- One clean **3–10 s** recording per character is a useful target; the API accepts 2–15 s per clip. Retain the actual accepted source.
+- Use the **same adopted native voice sample** on later clips. It may be extracted from an accepted earlier H3 character seed after checking one speaker, speech quality, ambience and music. The sample supplies timbre; its words need not match the new line. Do not substitute an old animatic TTS guide for an adopted native character voice.
 - WAV or MP3, 2–15 s per clip, <= 15 MB, up to 3 clips, total <= 15 s.
 - Name it `<Audio 1>` and state what is preserved:
   - `reference` — timbre and delivery, new words (normal dialogue).
@@ -104,6 +106,6 @@ A voice reference is only as good as the sample:
 1. Am I mixing `first_frame` with `reference_audio`? The plugin will reject it; choose A or B.
 2. Is the voice reference clean, 3 s+, and the same file as the previous clip?
 3. Is the speaker id stable, and is there only one speaker in the shot?
-4. Does the line fit about 3.3 words per second, with a beat after it?
+4. Does the exact line fit the intended spoken interval plus breathing/tail? The 3.3 words/s heuristic applies to English word counts; Chinese needs character/syllable estimation and an actual local speech check.
 5. Does `retention_analysis` say what is copied and what is free?
 6. If chaining frames, did I describe the path from the pinned pose instead of restating the image?

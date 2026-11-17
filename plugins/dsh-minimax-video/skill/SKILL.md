@@ -1,140 +1,112 @@
 # MiniMax H3 video
 
-MiniMax H3 — also written Hailuo 3, Hailuo-03, 海螺 H3 — turns text, images, video and audio into **one 4–15 second clip with native synchronized sound**: dialogue, foley, ambience and score are generated with the picture, not added later. Four tiers share one API but not one feature matrix.
+MiniMax H3 / Hailuo 3 produces one 4–15 second clip with native sound (Max: 5–15). Use this skill for H3 planning, reference selection, generation, recovery or 768P→2K regeneration. For a new AI film, first read `production-workflow.md`: project registry, local QA, evidence boundaries and handoff apply across projects and models.
 
-Use this skill before writing or reviewing an H3 prompt, choosing a tier or resolution, blocking camera moves, designing a multi-shot clip, or running the 768P-to-2K regeneration.
+## Division of work
 
-## Route the request
+- **Gemini 4 Argon:** screenplay, dialogue, narration and creative prompt writing under the user's approval rules. A necessary editorial judgment may use selected images/short clips with a stated purpose and local evidence.
+- **Local tools + DeepSeek subagents:** inspect actual inputs, source hashes, ffprobe, decoding, ASR, waveform/silence boundaries, full-frame metrics, contact sheets, parameter checks and evidence reconciliation. Do not send routine technical checks to a paid multimodal API.
+- **Lead:** resolve conflicts, review evidence and limits, integrate versions. Model PASS is not user approval. A model change or compressed summary does not reset project constraints.
 
-| Need | Tool |
+## Tools and spending
+
+| Need | Tool / local entry |
 |---|---|
-| Tier, resolution, duration, price, limits | `video_models` |
-| A new clip from text, first/last frames, or reference media | `video_generate` |
-| Status, wait, download, cancel/delete | `video_task` |
-| Official 768P → 2K regeneration | `video_regenerate` |
-| Structure a vague prompt or assign reference roles | `video_prompt_enhance` (H3-Context-IR) |
+| Model matrix, regional price snapshot | `video_models` (offline) |
+| Validate sources/contract/cost without generating | `video_prepare`, or `dry_run:true` |
+| Declare/check cumulative batch budget | `video_budget` |
+| Generate after valid preparation | `video_generate` |
+| Recover/query/wait/download the same task | `video_task` |
+| Official accepted 768P source → 2K | `video_regenerate` |
+| Optional paid Context-IR prompt expansion | `video_prompt_enhance` |
+| Register approved assets/build request/local QA | `../production/cli.mjs` (local only; see `production-workflow.md`) |
 
-Call `video_models` before answering "which model / how much"; its price snapshot is the source of truth in this plugin.
+Read `video_models` before model/price decisions. List-price estimates are not account charges. Set the approved batch budget before spending; a per-call cap does not replace a cumulative budget. Unknown submitted orders keep their reservation until reconciled. The `video_budget` ledger covers **H3 generation and regeneration calls only**; Context-IR is token-priced, cannot carry a budget or max_cost, requires explicit `allow_unbounded_cost:true` plus `override_reason`, and is not part of the reservation ledger. It also excludes `image_generate` and Gemini/Claude token spend. A user-given cross-tool total budget must be allocated by stage and merged with those other receipts/usage by the lead, not entered wholesale into `video_budget`. List prices, conservative upper bounds and raw usage are not the actual account bill. Never treat a client timeout as a free failed generation or submit again just to get a response. Query the recorded task.
 
-## Hard constraints
+Use the prepared plan and inspect its actual sources, reference roles, exact dialogue and cost. If blocked, repair the cause; do not set override flags just to finish. Two repetitions of the same failure trigger diagnosis, not another paid draw. Optional unused media fields should be omitted; empty placeholders are not source files.
 
-- **One call = one clip, 4–15 s** (Max: 5–15 s). There is no extension endpoint. For a longer piece, generate several clips and join them; carry the last frame into the next clip as `first_frame` for continuity.
-- **Duration is nominal.** H3 renders `17k + 5` frames at 24 fps: a 4 s request is 107 frames ≈ 4.46 s, so the file can run slightly longer than the number you passed. Leave headroom when cutting to a fixed beat.
-- **2K only on `MiniMax-H3`.** Highspeed, Lite and Max stop at 768P; 480P exists only on those three.
-- **Frames and references are mutually exclusive.** `first_frame`/`last_frame` is image-to-video; `reference_image`/`reference_video`/`reference_audio` is reference-to-video. Never mix them.
-- **`last_frame` needs `first_frame`.**
-- **Prompt ≤ 7000 characters** per text item.
-- **H3 always produces audio.** Write the sound you want. If the user truly wants silence, say it explicitly in both sound fields (`overall_soundscape: N/A`, `non_diegetic_music: N/A`).
-- **No negative prompts.** Guidance is effectively 1.0: every word renders. "No cars" tends to add cars. Describe what is present instead ("an empty rain-slick street").
-- **Text-to-video needs a concrete ratio** (default 16:9). Image-to-video follows the frame image. Reference-to-video defaults to adaptive; Lite must name a concrete ratio.
+## Reference selection comes before prompt writing
 
-## Longer than one clip
+1. Find the registered same-shot approved keyframe matching the intended starting state. Prefer its original high-quality bytes.
+2. Verify its character/scene lineage and current hash. An approved keyframe may already carry the identity and spatial roots; do not blindly attach every card again and mix views.
+3. Use a video screenshot only for a necessary exact continuation/action state and record why the approved keyframe is unsuitable. Open the actual screenshot: check people, hands, props and space before paying.
+4. A reused keyframe must fit this shot's speaker/action/time. Similar filenames or convenient duration do not establish compatibility.
+5. Preserve latest explicit adoption decisions alongside older review history. A filename containing REJECTED is not the final adoption state. File recency, model score, or collection inclusion is not approval.
 
-H3 has no extension endpoint. Two continuity tools pull in opposite directions:
+Registered production is validated by `.ai-video/project.json`: sources are matched by content hash, roots inherited through `root_ids`, shot dependencies checked, and screenshot substitution requires a reason. Registration requires an explicit `--origin` (`generated_original`, `video_frame`, `external_capture`, `user_supplied`, `derived_render`). For deriving a new keyframe/image before any same-shot keyframe is approved, bootstrap references with explicit `--ids HERO_ROOT_v1,SITE_MASTER_v1` (must cover the shot's required roots); do not default-send an old keyframe. Once a keyframe is approved, the video `request` uses it (or `--keyframe-id`) and inherits its roots. `asset_ids` binds media slots to registered asset ids; `source_asset_id` binds a byTask regeneration source; both are accepted in the H3 schema and plan fingerprint. Missing approval, drift or scope conflicts must be resolved before generation.
 
-- **Exact visual join:** use the last frame of clip A as `first_frame` of clip B.
-- **Recurring voice:** use `reference_audio` + `<Audio 1>`, but reference audio **cannot** be combined with `first_frame` in one request.
+## Modes and hard API constraints
 
-So choose one:
+- One call is one clip: H3/Highspeed/Lite 4–15 integer seconds; Max 5–15. There is no extension endpoint. For a long film, plan separate shots. A tail-frame chain is an option when exact continuation is needed, not the default replacement for approved keyframes.
+- Requested duration is nominal. Source duration, frame count, spoken interval, handles and used interval are different measurements. A 4-second request may return 107 frames / about 4.46 seconds at 24fps.
+- **Direct generation of 2K** is available on `MiniMax-H3` only. Lite/Highspeed/Max direct generation stops at 768P. This is distinct from the regeneration source rule below.
+- `first_frame` pins the opening image and determines the frame shape; `last_frame` requires `first_frame`. Frames cannot be mixed with any `reference_*` inputs.
+- `reference_images` supplies identity, costume, scene, composition or style; it does not pin the exact first frame. Name `<Picture 1>`… and assign each a specific job.
+- `reference_audio` supplies timbre/music/rhythm/effect texture, **not the words to speak**. Name `<Audio 1>`… and write the exact approved dialogue in the prompt.
+- `reference_videos` supplies motion/camera/editing rhythm or sound. Name `<Video 1>`… and assign its role.
+- Text-to-video needs a concrete ratio; image-to-video follows the image. Reference mode defaults adaptive except Lite requires a concrete ratio.
+- Prompt ≤7000 characters. Describe the target positively; do not expect a negative phrase to remove a worker already visible in the source image.
+- H3 produces sound. Specify appropriate scene sound and score separately. Check the actual result even when requesting quiet or no score.
 
-1. **Reference mode** — `<Picture 1>` character sheet + `<Audio 1>` voice reference on every clip. Voice and identity stay stable; accept small visual jumps at the joins.
-2. **Frame chain** — last frame → `first_frame` for a seamless join. H3 invents a new voice each clip; dub the recurring character later.
-3. **One clip** — if the exchange fits 15 s, keep it in one generation. This is usually the best quality per yuan.
+For recurring voice + approved visual, use reference mode with a suitable approved image and native voice sample; accept that the opening frame is not pinned. For exact frame continuation, use frame mode and explicitly plan how voice consistency will be handled. Do not silently mix mutually exclusive inputs. Full choices: `references/continuity-and-voice.md`.
 
-Full recipes and a decision table: `references/continuity-and-voice.md`.
+## Tier choice without a mandatory ladder
 
-## Pick a tier
+| Tier | Direct resolution | Typical use |
+|---|---|---|
+| MiniMax-H3 | 768P, 2K | final/direct 2K or quality-critical work |
+| MiniMax-H3-Highspeed | 480P, 768P | selected fast iteration |
+| MiniMax-H3-Lite | 480P, 768P | economical iteration; accepted 768P can be regenerated to 2K |
+| MiniMax-H3-Max | 480P, 768P | multi-asset reference and controlled expansion |
 
-| Tier | Use it for | Resolution | Duration |
-|---|---|---|---|
-| `MiniMax-H3` | final quality, 2K delivery | 768P / 2K | 4–15 s |
-| `MiniMax-H3-Highspeed` | everyday social content | 480P / 768P | 4–15 s |
-| `MiniMax-H3-Lite` | drafts, variants, batch tests | 480P / 768P | 4–15 s |
-| `MiniMax-H3-Max` | many reference assets + prompt expansion | 480P / 768P | 5–15 s |
+Do not require Lite480→Highspeed768→H3 as a fixed paid sequence. Choose the smallest useful experiment, review it, and retain adopted sources. If an accepted 768P source already exists, assess official regeneration. Direct 2K may be cheaper for a known final request; check the current regional catalog. Do not regenerate an unreviewed draft just because quota remains.
 
-A sensible loop: **Lite 480P 4 s to test the idea → Highspeed 768P to test motion and sound → H3 2K for delivery.** Direct 2K is usually cheaper than 768P plus regeneration; regenerate when you already have a 768P cut you like, or when you deliberately iterate at 768P.
+## Prompt and exact speech
 
-## The prompt is a small shot script
-
-The API accepts plain prose, but H3's Context-IR output and production prompts use a three-field shape. Write it in English; keep only exact dialogue, on-screen text and proper nouns in their original language.
+Creative text follows the user's designated writer. The API accepts prose; the usual three fields are:
 
 ```text
-integrated_multimodal_description: [Shot 1] <style, framing, subject, place, action, camera, light> [Shot 2] At 00:04.500, the camera cuts to <new information>.
+integrated_multimodal_description: [Shot 1] subject, place, state, one motivated camera move, observable action and exact synchronized speech.
 
-overall_soundscape: <1–4 sentences: ambience, action sounds, non-verbal human sounds>
+overall_soundscape: specific scene ambience, physical sounds and non-verbal voice.
 
-non_diegetic_music: <1–3 sentences: instruments, tempo, dynamics; or N/A>
+non_diegetic_music: the intended score, or N/A.
 ```
 
-- `[Shot 1]` has no timestamp. Later cuts use `[Shot 2] At 00:04.500, the camera cuts to ...`, strictly increasing and inside the clip.
-- A cut must add information, viewpoint, space, state or time. For a modest reframing, move the camera instead of cutting.
-- Keep the style sentence stable across clips of the same film.
-- 350–500 English words is a useful ceiling for a complex 10–15 s clip; a simple 5 s clip needs far less. Correct timing beats word count.
+Dialogue must appear as literal approved text, for example `<d>[Chinese]批准的原句</d>`; the language label and actual words both belong in the prompt. “Speaking the line of Audio 1” is incomplete. A voice sample may speak a different sentence. `dialogue` in preparation binds the expected words; it does not replace the prompt text.
 
-See `references/prompt-guide.md` for dialogue tags, voiceover, reference labels, alignment lines and retention markers.
+Separate a voice sample's timbre from acting direction, pace and pauses. The first character seed can be a single-speaker native H3 scene without TTS reference; extract an accepted native sample for later shots. Do not substitute historical animatic TTS for an adopted character voice.
 
-## Block the camera, do not decorate it
+English words/second are only a planning heuristic and cannot be applied to a Chinese sentence by treating it as one space-delimited word. Check actual speech after generation. Plan breathing and tail time, normally about one second at each end for new sources, but do not mechanically trim an already accepted short source or cut its last syllable. Record exceptions.
 
-Name one primary move per shot, with type, direction, amplitude and speed only when they matter:
+One primary camera move per shot; a cut must add information. Keep style stable across related shots. Detailed recipes: `references/prompt-guide.md`, `references/camera.md`, `references/video-types.md`, `references/examples.md`.
 
-- `push in` / `pull out` — the camera body moves.
-- `zoom in` / `zoom out` — focal length changes, camera stays.
-- `pan` / `tilt` — pivot from a fixed position.
-- `truck` / `pedestal` — translate sideways / vertically.
-- `arc` / `tracking` / `static` / `POV` / `roll` / `handheld`.
+## Local review before adoption or 2K
 
-Write it as prose inside the shot, not as a tag list. `references/camera.md` has the full table, durations and failure modes.
+1. ffprobe actual dimensions/fps/frames/audio/duration; decode locally.
+2. Run cached local ASR for specified dialogue; compare with approved text. Resolve homophones/omissions rather than rewriting the script to match ASR.
+3. Check speech boundaries with waveform/silence evidence; ASR token timestamps are not exact cut points.
+4. Scan every decoded frame for measurable signals where relevant; inspect suitable frame sequences/contact sheets for action and identity. A signal scan does not understand hands or prove natural acting.
+5. Review action motivation/recovery, speaker identity, unwanted sounds and actual opening/tail. Retain original 768P + native audio + final prompt + all original input bytes/task receipts.
 
-## Sound is part of the direction
+Record source QC through the local CLI; evidence is hash-bound to the source. `frame_scan` `pass` means `machine_pass_scope: decode_and_coverage` (decode + verified coverage + valid metric structure), not content acceptance; dark/static shots stay suspicion for motion/agent review rather than forcing a regeneration. An ASR mismatch can only be recorded `review_required`; `--review-decision` defaults to `pending` and blocks 2K. Use `--review-decision accepted` only after an actual listen with a stated scope; `motion_review`/identity/voice reviews need a declared accepted reviewer decision (`dsh.ai-video-review/1`). A plain metadata scan never triggers ASR implicitly; use `--asr`/`--expected` with the configured local toolchain.
 
-- Put shot-synchronized dialogue, singing, diegetic music and decisive impacts in `integrated_multimodal_description`.
-- `overall_soundscape` covers ambience, physical action and non-verbal voice for the whole clip. Name only sounds something in the shot makes; a generic "city traffic" bed can come back as hiss.
-- `non_diegetic_music` is score the characters cannot hear. Describe instruments, tempo and dynamics, not abstract emotion.
-- Speech is about 3.3 words per second and fills roughly 57% of a clip: 22 words is comfortable, 28 is the practical maximum, 34 is too fast. Size the clip to the line, and leave a beat after it.
+Technical evidence, agent review, user acceptance and school/client acceptance are separate. Never label a subset scan, midpoint contact sheet, successful ASR, or model PASS as full-film human listening or phoneme-level lip-sync verification.
 
-## References: assign a job to every asset
+## Official 768P → 2K regeneration
 
-In reference-to-video, name each asset in the prompt and state what is preserved:
+`video_regenerate` is a regeneration pass, not an arbitrary upscaler.
 
-- `<Picture 1>` … `<Picture 9>` — identity, costume, prop, environment, style, composition.
-- `<Video 1>` … `<Video 3>` — motion, camera structure, editing rhythm, or the clip's own sound.
-- `<Audio 1>` … `<Audio 3>` — voice timbre, music, rhythm, effect texture.
-- `<Subject 1>` … — a reusable visible identity assembled from the pictures.
+- **Lite 768P sources can use the official 2K regeneration channel.** This was verified in production. `MiniMax-H3` in the regeneration request names the output model; it does not prohibit a Lite source. Direct-generation model restrictions above still apply.
+- Validate physical source requirements: 24fps, audio present, width/height divisible by32, area 768×768–768×1344, 107–362 frames in steps of17. The local preflight reads these fields from the retained local-qa evidence and blocks a non-conforming base source before payment. Preserve the untrimmed source.
+- Base-video mode resubmits the **exact final prompt actually used** and **all original reference inputs**. Use the stored request/bytes and check hashes; a renamed or later “similar” image is not the same input.
+- `source_task_id` mode additionally requires account whitelist access and a succeeded task within7days. In a registered project it also needs `source_asset_id` whose `task_id`/`provenance.task_id` equals `source_task_id`, plus that source's retained QC; H3 additionally checks the local journal's `download.sha256` against it. Without that traceable local source, use the video mode that resubmits the local file and original inputs instead of improvising another remote source at QC time.
+- Bind local QC evidence to this source hash. A transcript/scan from an earlier candidate does not validate the final take. Registered production requires retained source QC before regeneration.
+- Compare clock/frame geometry and retain the accepted native audio if appropriate. Regeneration may redraw details; do not promise pixel identity or automatically replace accepted original sound.
+- Regeneration re-bills relevant inputs and output seconds. Its estimate is not the account bill.
 
-Say **what is copied and what is free**: "the woman's face and red coat follow `<Picture 1>`; the alley layout follows `<Picture 2>`; the camera rhythm follows `<Video 1>`; everything else is new." Ambiguous references get averaged into a new face.
+## Handoff invariants
 
-## Content archetypes
+After a model switch or compaction, re-read the project's short production contract and current adoption ledger. Preserve: actual baseline, exact speech, role of each reference, approved asset IDs/hashes, native voice choice, budget/held orders, pending task IDs, source review status and next minimal action. Do not compress these into “continue producing the film.”
 
-The user's labels — 故事型, 演绎型, 叙述型 — are not API parameters. They are three different balances of shot plan, performance and sound. `references/video-types.md` gives recipes for:
-
-narrative story · performance / dialogue · voiceover narration · product / e-commerce · brand film · action · montage / MV · animation / stylized · UI / game demo.
-
-Read the matching recipe before writing, then adapt it; do not paste a template unchanged.
-
-## 768P → 2K regeneration
-
-`video_regenerate` calls the official `/v2/video_regeneration` endpoint. It is **not** a generic upscaler:
-
-- Source must be a **MiniMax-H3 768P output**: 24 fps, audio track present, width and height divisible by 32, area between 768×768 and 768×1344, 107–362 frames in steps of 17 (about 4–15 s).
-- Base-video mode must resubmit the **exact final prompt and all original reference media**; a mismatch can change the result.
-- `source_task_id` mode needs whitelist access and a succeeded task inside the 7-day query window.
-- Regeneration re-bills the original input media and costs output + input-video seconds. For a 5 s clip, 768P + regeneration is usually more expensive than direct 2K.
-
-## Before you submit: a five-point check
-
-1. **Length**: does the action or line fit 4–15 s? If not, split it.
-2. **One idea per shot**: is there a clear subject, action and change of state?
-3. **Camera**: one named move, motivated by the action?
-4. **Sound**: dialogue timed, ambience specific, score separate?
-5. **References**: every `<Picture>`, `<Video>`, `<Audio>` named and given a job?
-
-## References
-
-- `references/prompt-guide.md` — three-field prompt, timeline, dialogue, sound, reference schema.
-- `references/camera.md` — movement vocabulary, amplitude/speed, shot duration, common errors.
-- `references/video-types.md` — nine content recipes with shot plans and skeletons.
-- `references/examples.md` — complete prompts across modes.
-- `references/continuity-and-voice.md` — last-frame chaining, the first_frame/reference_audio conflict, voice-reference recipe and decision table.
-- `references/api-notes.md` — endpoint/field/limit/error reference and the pricing snapshot.
-
-Official docs: [video generation](https://platform.minimax.io/docs/guides/video-generation), [create task](https://platform.minimax.io/docs/api-reference/video-generation-v2-create), [regeneration](https://platform.minimax.io/docs/api-reference/video-generation-v2-regeneration), [Context-IR](https://platform.minimax.io/docs/api-reference/video-generation-v2-h3-context-ir).
+Load `production-workflow.md` for the reusable contract, local CLI and startup/handoff template. Official references remain in `references/api-notes.md`; actual tool validation and verified production corrections take precedence over a stale generic recipe.

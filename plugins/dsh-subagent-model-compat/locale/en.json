@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Subagent model compatibility",
+    "description": "Accepts empty optional fields when discovering or selecting subagent models. Preserves the official Session allowlist, validation, cancellation and tool scope. Applies to new Standard, PTC and Creator sessions on DSH 0.2.2-rc.3; existing sessions may require restarting DSH. Fork continues to inherit its parent model."
+  }
+}

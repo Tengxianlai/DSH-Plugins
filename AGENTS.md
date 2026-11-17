@@ -50,9 +50,9 @@ profile 上，走 bundle 托管通道。改这里的代码就是改正在运行�
 
 ## 生效与回滚
 
-- 改**宿主半边**（`index.js` / `lib/`）：必须重启 dsh-web 才生效（插件代码在启动时装入）。
-- 改**浏览器半边**（`client.js`）：刷新页面。
-- 改**挂载行**（插件自己的 `cordis.patch.yml`）：重启 dsh-web。
+- 改**宿主半边**（`index.js` / `lib/`）：以托管操作返回的 `application` / `nextStep` 为准。本机 rc.3 的 HMR 已于2026-11-16实测：对目标 bundle 使用 `set_bundle enabled:false` 后立即 `enabled:true`，热重组返回 `applied`，新工具/技能可在当前会话发现；无需重启 dsh-web。短暂禁用期间不要并行调用该插件；重启只作不支持热重组时的备选，不为重载中断其它会话。
+- 改**浏览器半边**（`client.js`）：另核构建/watch运行态并刷新页面，不用宿主热重组结果代替页面验证。
+- 改**挂载行**（插件自己的 `cordis.patch.yml`）：走托管通道，检查实际 `application` / `nextStep`。
 - 回滚：插件是软链，`git checkout <tag>` / `git revert` 即可；对外发布过的点打 `git tag <name>@<version>`。
 - 卸载：`remove_bundle`，再从 README 表格删行。
 
@@ -62,7 +62,7 @@ profile 上，走 bundle 托管通道。改这里的代码就是改正在运行�
   `parameters`；`output.schema` 必须写成对象层 `required: [...]`。裸 `ctx.tools.register({...})`
   时写错会启动报 `JsonSchemaError: ... required is not supported on type "..."`，整条 entry 不激活。
   稳妥写法：用 `defineTool()` 包一层。
-- 工具定义改动后接口不会自己变，见「生效与回滚」：宿主半边必须重启。
+- 工具定义改动后需核对实际目录与离线预检，见「生效与回滚」；仅修改磁盘文件不能证明当前会话已装入新接口。
 - 调用外部 API 时，**先用最小请求验证字段语义**再封装：HTTP 200 + 有返回不代表参数生效
   （例：`/v1/images/edits` 的多参考图必须用重复 `image` 字段；`image[]` 会静默只读第一张）。
   验证要挑一个可量化的信号（usage 里的 token 数、返回张数、尺寸），不要只看"没报错"。

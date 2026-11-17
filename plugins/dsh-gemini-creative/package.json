@@ -1,8 +1,8 @@
 {
   "name": "dsh-gemini-creative",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "按需加载的创作与审看技能：写剧本/文案，或拿场景图、分镜、PDF 与剧本对照。",
+  "description": "按需加载的创作与审看技能：写剧本/文案、对照场景图与分镜；技术质检路由到本地工具与子代理。",
   "type": "module",
   "main": "index.js",
   "exports": {

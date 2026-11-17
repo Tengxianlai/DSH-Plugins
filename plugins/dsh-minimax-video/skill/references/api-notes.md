@@ -1,13 +1,14 @@
 # H3 API notes
 
-Snapshot: 2026-11-15. Check the official pages before promising a price or a limit.
+Snapshot: 2026-11-16 (list prices, not account bills). Check the official pages before promising a price or a limit.
 
 - [Video generation guide](https://platform.minimax.io/docs/guides/video-generation)
 - [Create task](https://platform.minimax.io/docs/api-reference/video-generation-v2-create)
 - [Query task](https://platform.minimax.io/docs/api-reference/video-generation-v2-query)
 - [Regeneration](https://platform.minimax.io/docs/api-reference/video-generation-v2-regeneration)
 - [Context-IR](https://platform.minimax.io/docs/api-reference/video-generation-v2-h3-context-ir)
-- [Pricing](https://platform.minimax.io/docs/pricing/overview)
+- [Pricing (international)](https://platform.minimax.io/docs/pricing/overview)
+- [Pricing (China)](https://platform.minimax.cn/docs/pricing/overview)
 
 ## Endpoints
 
@@ -107,7 +108,7 @@ The base video must match H3's 768P output spec:
 | Area | 768×768 <= area <= 768×1344 |
 | Frames | 107–362, step 17 (about 4–15 s) |
 
-The `text` must be the final prompt actually used for the 768P source, not the pre-Context-IR draft. A mismatch can change the result. Regeneration re-bills the original input media.
+The `text` must be the final prompt actually used for the 768P source, not the pre-Context-IR draft. A mismatch can change the result. Regeneration re-bills the original input media (original reference-video seconds are charged again) and is always quoted as a **partial floor/upper range**, never as a single invoice-like price.
 
 ## Context-IR
 
@@ -142,10 +143,12 @@ Errors are OpenAI-shaped: `{type:"error", error:{type,message,http_code}, reques
 - First 5 images free (Max: 2), then CNY 0.20 / USD 0.04 per image on H3 and Highspeed, CNY 0.13 / USD 0.02 on Lite, CNY 0.50 / USD 0.074 on Max.
 - Input video is billed per second at the output resolution rate; Max has separate input rates (CNY 0.97 / USD 0.143 at 768P).
 - Audio input is free.
-- Regeneration: output CNY 0.30 / USD 0.05 per second **plus** input video CNY 0.30 / USD 0.05 per second, plus images beyond 5 at CNY 0.15 / USD 0.025.
+- Regeneration is a **partial floor/upper** estimate, never one price: output CNY 0.30 / USD 0.05 per second, original reference-video seconds re-billed at the same input-video rate, plus images beyond 5 at CNY 0.15 / USD 0.025. Whether the base clip also pays an input-video charge is unconfirmed, so include that only in the upper bound.
 - Context-IR: CNY 5.80 / USD 0.90 per M input tokens; CNY 23.00 / USD 3.60 per M output tokens.
 
-A 5 s 768P clip plus 5 s regeneration is about CNY 5.50, versus CNY 4.00 for direct 2K. Regeneration is a finishing step, not a cost optimization.
+Example assumptions, not a price promise: a 5 s standard-H3 768P generation (CNY 2.50) plus 5 s regeneration (CNY 1.50 output) is about CNY 4.00 at the floor; the upper bound is about CNY 5.50 only if the base clip also pays the CNY 0.30/s input-video charge. Original reference-video seconds add CNY 0.30/s to both bounds; images beyond the free allowance add their image fee. Direct 2K 5 s is about CNY 4.00. Do not claim a fixed ¥5.50 regeneration, a guaranteed saving, or a guaranteed loss; check the current regional catalog: [China pricing](https://platform.minimax.cn/docs/pricing/overview) / [international pricing](https://platform.minimax.io/docs/pricing/overview). The list prices, conservative upper bounds and raw usage reported here are estimates, not an actual account bill.
+
+`video_budget`'s atomic cumulative reservations apply only to H3 generation and regeneration calls. Context-IR is token-priced, cannot carry a budget or max_cost, and needs explicit `allow_unbounded_cost:true` plus `override_reason`; it is not part of the reservation ledger. The ledger also does not include `image_generate` or Gemini/Claude token usage; a cross-tool total budget must be allocated by stage and reconciled with the other tools' receipts/usage by the lead, not assigned wholesale to `video_budget`.
 
 ## Measured output (smoke test, 2026-11-15)
 
@@ -168,3 +171,5 @@ So the requested `duration` is nominal: H3 uses `17k + 5` frames, and a 4 s requ
 - The plugin inlines local files up to the per-asset limits. Larger assets should be uploaded and passed as URLs; the 64 MB body cap is easy to hit with Base64.
 - `response_format:"flat"` exists, but the plugin uses the default `task` shape because it is the same shape as query.
 - `callback_url` needs a public HTTPS endpoint that echoes `challenge` within 3 seconds; not useful for a local desktop session.
+- Tool-generated filenames are often UTC while approval messages/editing notes are local time. Normalize to one zone before claiming which take was approved; file mtime is not the approval time.
+- Keep the downloaded original PNG and any transcoded JPEG as separate artifacts with separate hashes. A changed/re-encoded derivative does not prove the original was damaged.
