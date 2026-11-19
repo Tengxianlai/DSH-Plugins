@@ -1,0 +1,8 @@
+# dsh-share-hub bundle：
+#   share-hub        会话分享中心（宿主路由 + 浏览器入口）
+#
+# 只读链接服务默认监听 127.0.0.1:3099，由宿主机既有反代/隧道把它挂到
+# https://<域名>/s/<短码>/；导出的 PDF/HTML/Markdown 落在本机，经认证路由下载。
+- insert:
+    - id: share-hub
+      name: dsh-share-hub

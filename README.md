@@ -7,7 +7,9 @@ profile 上；挂载行写在插件自己的 `cordis.patch.yml` 里，profile �
 
 | 插件 | 版本 | 半边 | 说明 |
 |---|---|---|---|
+| `dsh-share-hub` | 0.1.0 | host + web | 会话分享中心：只读链接（本机服务 + 既有反代中转 `/s/<短码>/`）+ 本机导出 PDF/HTML/Markdown 经认证路由下载 |
 | `dsh-deliverable-download` | 0.1.0 | host + web | 交付/变更卡片与预览标题栏的「下载」动作，经认证路由以附件下发 |
+| `dsh-subagent-model-compat` | 0.1.0 | host / preset | 兼容子智能体模型清单查询与显式选模型的空字符串参数；复用官方白名单与生命周期，适用 DSH 0.2.2-rc.3 的 Standard / PTC / Creator |
 | `dsh-playwright-per-agent` | 0.2.0 | host | 在每个根 agent 上下文里挂 Playwright MCP |
 | `dsh-session-id` | 0.2.0 | host + web | 会话标题栏显示当前 session id；点击复制带说明的三行（会话 ID / 存储目录＝日志所在 / 工作目录），粘贴即可让其他会话去读日志 |
 | `dsh-image-gen` | 0.4.0 | host | 生图/改图，保留2K/4K费用保护；新增离线预演、required/hash参考契约、输入/输出收据与并发防覆盖 |
