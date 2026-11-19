@@ -19,75 +19,97 @@ window.__ModuleLoader__.load({
     const CSS_TAG_ID = 'dsh-share-hub/share.css'
 
     const CSS = [
-      '.sh_button{box-sizing:border-box;border:0;height:22px;border-radius:var(--dsw-radius-xs);background:var(--dsw-alias-fill-tsp-secondary);color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:22px;padding:0 7px;gap:4px;display:inline-flex;align-items:center;white-space:nowrap;cursor:pointer;flex:none;transition:background .15s,color .15s}',
-      '@media (hover:hover){.sh_button:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}}',
-      '.sh_button:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:1px}',
+      // ---- 标题栏入口 ----
+      '.sh_button{box-sizing:border-box;border:0;height:22px;border-radius:6px;background:var(--dsw-alias-fill-tsp-secondary,rgba(127,127,127,.12));color:var(--dsw-alias-label-tertiary,#a1a1aa);font-size:12px;line-height:22px;padding:0 7px;gap:4px;display:inline-flex;align-items:center;white-space:nowrap;cursor:pointer;flex:none;transition:background .15s,color .15s}',
+      '@media (hover:hover){.sh_button:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.18));color:var(--dsw-alias-label-secondary,#71717a)}}',
+      '.sh_button:focus-visible{outline:2px solid var(--sh-accent,#0d9488);outline-offset:1px}',
 
-      '.sh_overlay{position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:28px;background:rgba(10,12,18,.42);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:sh_fade .16s ease-out}',
+      // ---- 浮层与面板：中性灰阶，无渐变、无彩光 ----
+      '.sh_overlay{position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(9,9,11,.38);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);animation:sh_fade .15s ease-out}',
       '@keyframes sh_fade{from{opacity:0}to{opacity:1}}',
-      '@keyframes sh_rise{from{opacity:0;transform:translateY(8px) scale(.99)}to{opacity:1;transform:none}}',
-      '.sh_panel{box-sizing:border-box;width:min(680px,100%);max-height:min(84vh,760px);display:flex;flex-direction:column;border-radius:18px;overflow:hidden;background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary,#111);border:1px solid color-mix(in srgb,var(--dsw-alias-border-l2,#ddd) 80%,transparent);box-shadow:0 32px 80px rgba(0,0,0,.38),0 2px 8px rgba(0,0,0,.12);animation:sh_rise .18s cubic-bezier(.2,.8,.2,1)}',
+      '@keyframes sh_rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}',
+      '.sh_panel{--sh-bg:var(--dsw-alias-bg-base,#fff);--sh-surface:var(--dsw-alias-fill-tsp-secondary,rgba(127,127,127,.1));--sh-hover:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.16));--sh-border:var(--dsw-alias-border-l2,#e4e4e7);--sh-text:var(--dsw-alias-label-primary,#18181b);--sh-text-2:var(--dsw-alias-label-secondary,#71717a);--sh-text-3:var(--dsw-alias-label-tertiary,#a1a1aa);--sh-primary:var(--dsw-alias-label-primary,#18181b);--sh-primary-fg:var(--dsw-alias-bg-base,#fff);--sh-accent:#0d9488;--sh-success:#15803d;--sh-mono:var(--dsw-font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);box-sizing:border-box;width:min(520px,94vw);max-height:min(86vh,780px);display:flex;flex-direction:column;border-radius:12px;overflow:hidden;background:var(--sh-bg);color:var(--sh-text);border:1px solid var(--sh-border);box-shadow:0 24px 48px -12px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.04);animation:sh_rise .16s cubic-bezier(.2,.8,.2,1)}',
+      'body[data-ds-dark-theme] .sh_panel{--sh-accent:#14b8a6;--sh-success:#34d399;box-shadow:0 24px 48px -12px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08)}',
+      '@media (prefers-color-scheme:dark){body:not([data-ds-dark-theme]) .sh_panel{box-shadow:0 24px 48px -12px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.08)}}',
       '@media (prefers-reduced-motion:reduce){.sh_overlay,.sh_panel{animation:none}}',
 
-      '.sh_head{display:flex;align-items:center;gap:12px;padding:18px 22px 14px}',
-      '.sh_icon{width:36px;height:36px;flex:none;border-radius:12px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#4f7cff,#8b5cf6);box-shadow:0 6px 16px rgba(79,124,255,.32)}',
+      // ---- 头部 ----
+      '.sh_head{display:flex;align-items:center;gap:10px;padding:18px 22px 12px}',
+      '.sh_icon{width:32px;height:32px;flex:none;border-radius:8px;display:grid;place-items:center;background:var(--sh-surface);border:1px solid var(--sh-border);color:var(--sh-text)}',
       '.sh_titles{flex:1;min-width:0}',
-      '.sh_title{font-size:15px;font-weight:650;letter-spacing:.01em}',
-      '.sh_sub{font-size:11.5px;color:var(--dsw-alias-label-tertiary);margin-top:2px;font-family:var(--dsw-font-mono,ui-monospace,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.sh_close{width:30px;height:30px;border:0;border-radius:9px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;font-size:18px;line-height:1;display:grid;place-items:center}',
-      '.sh_close:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}',
+      '.sh_title{font-size:15px;font-weight:600;line-height:22px;letter-spacing:-.01em}',
+      '.sh_sub{font-size:12px;line-height:18px;color:var(--sh-text-2);font-family:var(--sh-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.sh_close{width:30px;height:30px;flex:none;border:0;border-radius:7px;background:transparent;color:var(--sh-text-3);cursor:pointer;font-size:18px;line-height:1;display:grid;place-items:center;transition:background .15s,color .15s}',
+      '.sh_close:hover{background:var(--sh-hover);color:var(--sh-text)}',
 
-      '.sh_tabs{display:flex;gap:4px;margin:0 22px;padding:4px;border-radius:12px;background:var(--dsw-alias-fill-tsp-secondary,rgba(127,127,127,.1));width:fit-content}',
-      '.sh_tab{border:0;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;padding:6px 14px;border-radius:9px;font-size:12px;font-weight:500;transition:background .15s,color .15s}',
-      '.sh_tab.on{background:var(--dsw-alias-bg-base,#fff);color:var(--dsw-alias-label-primary);box-shadow:0 1px 2px rgba(0,0,0,.1)}',
+      // ---- 分段 tab ----
+      '.sh_tabs{display:flex;gap:2px;margin:0 22px;padding:3px;box-sizing:border-box;height:32px;border-radius:8px;background:var(--sh-surface);width:fit-content}',
+      '.sh_tab{border:0;background:transparent;color:var(--sh-text-2);cursor:pointer;height:26px;padding:0 14px;border-radius:6px;font-size:13px;font-weight:500;transition:background .15s,color .15s}',
+      '.sh_tab.on{background:var(--sh-bg);color:var(--sh-text);box-shadow:0 1px 2px rgba(0,0,0,.06)}',
 
-      '.sh_body{padding:16px 22px 22px;overflow:auto;display:flex;flex-direction:column;gap:14px}',
-      '.sh_card{border:1px solid var(--dsw-alias-border-l2,#e6e8eb);border-radius:14px;padding:14px 16px;background:var(--dsw-alias-bg-base,#fff)}',
-      '.sh_card-title{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary);margin-bottom:8px;font-weight:600}',
+      // ---- 主体 ----
+      '.sh_body{padding:14px 22px 20px;overflow:auto;display:flex;flex-direction:column;gap:14px}',
+      '.sh_card{border:1px solid var(--sh-border);border-radius:10px;padding:12px 14px;background:var(--sh-bg)}',
+      '.sh_card-title{font-size:12px;font-weight:500;color:var(--sh-text-2);margin-bottom:4px}',
 
-      '.sh_switchrow{display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--dsw-alias-border-l2,#f0f0f0)}',
-      '.sh_switchrow:first-of-type{border-top:0;padding-top:2px}',
+      // ---- 开关行 ----
+      '.sh_switchrow{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--sh-border)}',
+      '.sh_switchrow:first-of-type{border-top:0}',
       '.sh_switchtext{flex:1;min-width:0}',
-      '.sh_switchlabel{font-size:12.5px;color:var(--dsw-alias-label-primary)}',
-      '.sh_switchdesc{font-size:11px;color:var(--dsw-alias-label-tertiary);margin-top:1px}',
-      '.sh_switch{position:relative;width:36px;height:20px;flex:none;border-radius:999px;background:color-mix(in srgb,var(--dsw-alias-label-tertiary) 35%,transparent);cursor:pointer;transition:background .18s}',
-      '.sh_switch.on{background:var(--dsw-alias-state-business-primary,#2f6feb)}',
-      '.sh_switch .knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .18s}',
+      '.sh_switchlabel{font-size:13.5px;font-weight:500;line-height:20px;color:var(--sh-text)}',
+      '.sh_switchdesc{font-size:12px;line-height:16px;color:var(--sh-text-2);margin-top:1px}',
+      '.sh_switch{position:relative;width:36px;height:20px;flex:none;border-radius:999px;background:var(--sh-border);cursor:pointer;transition:background .16s ease}',
+      '.sh_switch.on{background:var(--sh-accent)}',
+      '.sh_switch .knob{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .16s ease}',
       '.sh_switch.on .knob{transform:translateX(16px)}',
       '.sh_switch input{position:absolute;opacity:0;inset:0;cursor:pointer}',
 
+      // ---- 有效期行 ----
+      '.sh_row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 2px}',
+      '.sh_rowlabel{font-size:12.5px;font-weight:500;color:var(--sh-text-2)}',
       '.sh_chips{display:flex;gap:6px;flex-wrap:wrap}',
-      '.sh_chip{border:1px solid var(--dsw-alias-border-l2,#ddd);background:transparent;color:var(--dsw-alias-label-secondary);border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer;transition:all .15s}',
-      '.sh_chip:hover{background:var(--dsw-alias-interactive-bg-hover)}',
-      '.sh_chip.on{background:var(--dsw-alias-state-business-primary,#2f6feb);border-color:transparent;color:#fff}',
+      '.sh_chip{height:28px;padding:0 10px;border-radius:6px;border:1px solid transparent;background:var(--sh-surface);color:var(--sh-text-2);font-size:12.5px;font-weight:500;cursor:pointer;transition:background .15s,color .15s}',
+      '.sh_chip:hover{background:var(--sh-hover)}',
+      '.sh_chip.on{background:var(--sh-primary);color:var(--sh-primary-fg)}',
 
-      '.sh_actions{display:flex;gap:8px;flex-wrap:wrap}',
-      '.sh_btn{box-sizing:border-box;height:36px;padding:0 15px;border-radius:10px;border:1px solid var(--dsw-alias-border-l2,#ddd);background:transparent;color:var(--dsw-alias-label-primary);font-size:12.5px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none;transition:all .15s}',
-      '.sh_btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      // ---- 动作区 ----
+      '.sh_actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}',
+      '.sh_exports{display:flex;align-items:center;gap:6px}',
+      '.sh_exportlabel{font-size:12px;color:var(--sh-text-3);margin-right:2px}',
+      '.sh_btn{box-sizing:border-box;height:36px;padding:0 16px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--sh-text);font-size:13px;font-weight:500;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none;transition:background .15s,color .15s,filter .15s}',
       '.sh_btn:disabled{opacity:.45;cursor:default}',
-      '.sh_btn.primary{background:linear-gradient(135deg,#4f7cff,#7c5cff);border:0;color:#fff;box-shadow:0 6px 16px rgba(79,124,255,.28)}',
-      '.sh_btn.primary:hover{filter:brightness(1.05)}',
+      '.sh_btn.primary{background:var(--sh-primary);color:var(--sh-primary-fg)}',
+      '.sh_btn.primary:hover:not(:disabled){filter:brightness(1.12)}',
+      '.sh_btn.ghost{height:32px;padding:0 10px;border-radius:6px;border-color:var(--sh-border);color:var(--sh-text-2);font-size:12px}',
+      '.sh_btn.ghost:hover:not(:disabled){background:var(--sh-surface);color:var(--sh-text)}',
 
-      '.sh_spin{width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;animation:sh_spin .7s linear infinite}',
+      '.sh_spin{width:12px;height:12px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:sh_spin .7s linear infinite;opacity:.8}',
       '@keyframes sh_spin{to{transform:rotate(360deg)}}',
 
-      '.sh_result{border:1px solid color-mix(in srgb,var(--dsw-alias-state-success-primary,#1a7f37) 35%,transparent);background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#1a7f37) 7%,transparent);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:12.5px}',
-      '.sh_result-head{display:flex;align-items:center;gap:8px;font-weight:600}',
-      '.sh_badge{width:18px;height:18px;border-radius:50%;background:var(--dsw-alias-state-success-primary,#1a7f37);color:#fff;display:grid;place-items:center;font-size:11px}',
-      '.sh_linkbox{font-family:var(--dsw-font-mono,ui-monospace,monospace);font-size:11.5px;background:var(--dsw-alias-bg-base,#fff);border:1px solid var(--dsw-alias-border-l2,#e6e8eb);border-radius:8px;padding:8px 10px;word-break:break-all;color:var(--dsw-alias-label-secondary)}',
-      '.sh_linkbox a{color:var(--dsw-alias-state-business-primary,#2f6feb);text-decoration:none}',
-      '.sh_meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--dsw-alias-label-tertiary);font-size:11px}',
-      '.sh_mini{height:26px;padding:0 10px;border-radius:7px;font-size:11.5px;border:1px solid var(--dsw-alias-border-l2,#ddd);background:transparent;color:var(--dsw-alias-label-primary);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}',
-      '.sh_mini:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      // ---- 结果卡 ----
+      '.sh_result{border:1px solid var(--sh-border);border-radius:8px;padding:12px;background:var(--sh-surface,rgba(127,127,127,.06));display:flex;flex-direction:column;gap:8px}',
+      '.sh_result-head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--sh-text)}',
+      '.sh_dot{width:8px;height:8px;border-radius:50%;background:var(--sh-success);flex:none}',
+      '.sh_urlrow{display:flex;align-items:center;gap:6px;height:34px;padding:0 4px 0 10px;border:1px solid var(--sh-border);border-radius:6px;background:var(--sh-bg)}',
+      '.sh_url{flex:1;min-width:0;font-family:var(--sh-mono);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.sh_url a{color:var(--sh-text);text-decoration:none}',
+      '.sh_url a:hover{text-decoration:underline}',
+      '.sh_copy{height:26px;padding:0 10px;border:0;border-radius:4px;background:var(--sh-surface);color:var(--sh-text);font-size:12px;font-weight:500;cursor:pointer}',
+      '.sh_copy:hover{background:var(--sh-hover)}',
+      '.sh_meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--sh-text-3);font-size:11.5px}',
 
-      '.sh_item{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--dsw-alias-border-l2,#e6e8eb);border-radius:12px;font-size:12px;transition:background .15s}',
-      '.sh_item:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+      // ---- 管理列表 ----
+      '.sh_item{display:flex;align-items:center;gap:8px;padding:11px 12px;border:1px solid var(--sh-border);border-radius:8px;font-size:12.5px;transition:background .15s}',
+      '.sh_item:hover{background:var(--sh-surface)}',
       '.sh_item .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.sh_muted{color:var(--dsw-alias-label-tertiary)}',
-      '.sh_err{color:var(--dsw-alias-state-danger-primary,#d33);font-size:12px}',
-      '.sh_empty{color:var(--dsw-alias-label-tertiary);font-size:12px;padding:10px 2px}',
-      '.sh_note{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.65}',
-      '.sh_note code{font-family:var(--dsw-font-mono,ui-monospace,monospace);background:var(--dsw-alias-fill-tsp-secondary,rgba(127,127,127,.12));padding:1px 5px;border-radius:4px}'
+      '.sh_mini{height:26px;padding:0 9px;border-radius:5px;font-size:11.5px;font-weight:500;border:1px solid var(--sh-border);background:transparent;color:var(--sh-text-2);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}',
+      '.sh_mini:hover{background:var(--sh-surface);color:var(--sh-text)}',
+
+      '.sh_muted{color:var(--sh-text-3)}',
+      '.sh_err{color:var(--dsw-alias-state-danger-primary,#e11d48);font-size:12px}',
+      '.sh_empty{color:var(--sh-text-2);font-size:12.5px;padding:10px 2px}',
+      '.sh_note{color:var(--sh-text-3);font-size:11.5px;line-height:1.7}',
+      '.sh_note code{font-family:var(--sh-mono);background:var(--sh-surface);padding:1px 5px;border-radius:4px}'
     ].join('')
 
     const DICT = {
@@ -422,36 +444,40 @@ window.__ModuleLoader__.load({
             switchRow('includeReasoning', t('reasoning'), t('reasoningDesc')),
             switchRow('redact', t('redact'), t('redactDesc'))
           ),
-          react.createElement('div', { className: 'sh_card', key: 'ttl' },
-            react.createElement('div', { className: 'sh_card-title' }, t('ttl')),
+          react.createElement('div', { className: 'sh_row', key: 'ttl' },
+            react.createElement('span', { className: 'sh_rowlabel' }, t('ttl')),
             chips()
           ),
           react.createElement('div', { className: 'sh_actions', key: 'actions' },
             button(busy === 'link' ? t('working') : t('makeLink'), 'primary', createLink, busy === 'link'),
-            button(busy === 'pdf' ? t('working') : t('exportPdf'), 'ghost', () => exportFile('pdf'), busy === 'pdf'),
-            button(busy === 'html' ? t('working') : t('exportHtml'), 'ghost', () => exportFile('html'), busy === 'html'),
-            button(busy === 'markdown' ? t('working') : t('exportMd'), 'ghost', () => exportFile('markdown'), busy === 'markdown')
+            react.createElement('div', { className: 'sh_exports' },
+              react.createElement('span', { className: 'sh_exportlabel' }, t('export')),
+              button(busy === 'pdf' ? t('working') : t('exportPdf'), 'ghost', () => exportFile('pdf'), busy === 'pdf'),
+              button(busy === 'html' ? t('working') : t('exportHtml'), 'ghost', () => exportFile('html'), busy === 'html'),
+              button(busy === 'markdown' ? t('working') : t('exportMd'), 'ghost', () => exportFile('markdown'), busy === 'markdown')
+            )
           ),
           error === '' ? null : react.createElement('div', { className: 'sh_err', key: 'err' }, error),
           result === null ? null : result.kind === 'link'
             ? react.createElement('div', { className: 'sh_result', key: 'result' },
               react.createElement('div', { className: 'sh_result-head' },
-                react.createElement('span', { className: 'sh_badge' }, '✓'), t('linkReady')
+                react.createElement('span', { className: 'sh_dot' }), t('linkReady'),
+                react.createElement('span', { className: 'sh_meta', style: { marginLeft: 'auto' } }, `${t('expires')} ${shortTime(result.expiresAt)}`)
               ),
-              react.createElement('div', { className: 'sh_linkbox' },
-                react.createElement('a', { href: result.url, target: '_blank', rel: 'noreferrer' }, result.url)
-              ),
-              react.createElement('div', { className: 'sh_meta' },
-                react.createElement('button', { className: 'sh_mini', onClick: () => copy(result.url, result.id) }, copied === result.id ? t('copied') : t('copy')),
-                react.createElement('span', null, `${t('expires')} ${shortTime(result.expiresAt)}`)
+              react.createElement('div', { className: 'sh_urlrow' },
+                react.createElement('div', { className: 'sh_url' },
+                  react.createElement('a', { href: result.url, target: '_blank', rel: 'noreferrer' }, result.url)
+                ),
+                react.createElement('button', { className: 'sh_copy', onClick: () => copy(result.url, result.id) }, copied === result.id ? t('copied') : t('copy'))
               )
             )
             : react.createElement('div', { className: 'sh_result', key: 'result' },
               react.createElement('div', { className: 'sh_result-head' },
-                react.createElement('span', { className: 'sh_badge' }, '✓'), `${t('fileReady')} · ${humanSize(result.bytes)}`
+                react.createElement('span', { className: 'sh_dot' }), `${t('fileReady')} · ${humanSize(result.bytes)}`
               ),
-              react.createElement('div', { className: 'sh_meta' },
-                react.createElement('a', { className: 'sh_mini', href: result.url, download: result.name }, `${t('download')} ${result.name}`)
+              react.createElement('div', { className: 'sh_urlrow' },
+                react.createElement('div', { className: 'sh_url' }, result.name),
+                react.createElement('a', { className: 'sh_copy', href: result.url, download: result.name }, t('download'))
               )
             ),
           react.createElement('div', { className: 'sh_note', key: 'note' }, t('linkHint'), react.createElement('br'), t('exportHint'))

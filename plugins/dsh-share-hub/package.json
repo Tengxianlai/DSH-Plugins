@@ -1,6 +1,6 @@
 {
   "name": "dsh-share-hub",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "会话分享中心：把当前会话发布成只读链接（经既有反代中转），或在本机导出 PDF / HTML / Markdown 后经认证路由下载。",
   "type": "module",
